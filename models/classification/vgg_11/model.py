@@ -3,12 +3,12 @@ from torch import nn
 
 class VGG_11(nn.Module):
     
-    def __init__(self, num_class: int):
+    def __init__(self, num_classes: int):
         """
         Модель VGG_11 
 
         Params: 
-            num_class - количество классов
+            num_classes - количество классов
         """
         super().__init__()
         
@@ -53,7 +53,7 @@ class VGG_11(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
 
-            nn.Linear(4096, num_class),
+            nn.Linear(4096, num_classes),
         )
 
     def forward(self, x):
