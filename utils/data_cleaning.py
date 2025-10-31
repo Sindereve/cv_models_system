@@ -10,8 +10,18 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 # Подавляем только предупреждения о truncated TIFF файлах
 warnings.filterwarnings("ignore", category=UserWarning, module="PIL.TiffImagePlugin")
 
-def auto_clean_dataset(data_dir: str):
+def auto_clean_dataset(
+        data_dir: str, 
+        show_stats: bool = True
+    ) -> None:
     """
+    Функция для проверки изображений на валидность.
+    Рекурсивно перебирает всё содержимое папки data_dir.
+    В случае не валидности изображение удаляется.
+
+    Args:
+        data_dir - путь к папке
+        show_stats - переключатель показа статистики
     """
     print(f"⚪[auto_clean_dataset] Start")
     
@@ -45,16 +55,18 @@ def auto_clean_dataset(data_dir: str):
                 stats['deleted_files'] += 1
     
     # Вывод результатов
-    print("🟢[auto_clean_dataset] Finish")
-    print(f" ➖ All file: {stats['total_files']}")
-    print(f" ➖ Good file: {stats['valid_files']}")
-    print(f" ➖ Count deleted: {stats['deleted_files']}")
-    
-    return stats
+    if show_stats:
+        print("🟢[auto_clean_dataset] Finish")
+        print(f" ➖ All file: {stats['total_files']}")
+        print(f" ➖ Good file: {stats['valid_files']}")
+        print(f" ➖ Count deleted: {stats['deleted_files']}")
 
 def is_valid_image(file_path: str) -> bool:
     """
     Проверяет, является ли файл валидным изображением
+
+    Args:
+        file_path - точный путь до файла
     """
     try:
         with Image.open(file_path) as img:
