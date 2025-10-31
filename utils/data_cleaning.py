@@ -20,8 +20,8 @@ def auto_clean_dataset(
     В случае не валидности изображение удаляется.
 
     Args:
-        data_dir - путь к папке
-        show_stats - переключатель показа статистики
+        data_dir: путь к папке
+        show_stats: переключатель показа статистики
     """
     print(f"⚪[auto_clean_dataset] Start")
     
@@ -66,7 +66,7 @@ def is_valid_image(file_path: str) -> bool:
     Проверяет, является ли файл валидным изображением
 
     Args:
-        file_path - точный путь до файла
+        file_path: точный путь до файла
     """
     try:
         with Image.open(file_path) as img:
