@@ -1,13 +1,16 @@
 import os
+from data_cleaning import auto_clean_dataset
 from kaggle.api.kaggle_api_extended import KaggleApi
 
 api = KaggleApi()
 api.authenticate()
 
-DATA_DIR = "./data"
+DATA_DIR = ".\\data"
 
 def removes(files: list[str]) -> None:
-    """Удаляем ненужные файлы из скаченных файлов"""
+    """
+    Удаляем ненужные файлы из скаченных файлов
+    """
     for file in files:
         file_path = os.path.join(DATA_DIR, file)
         if os.path.exists(file_path):
@@ -29,6 +32,7 @@ def download_PetImages_CatVsDog():
         filename = ['MSR-LA - 3467.docx', 'readme[1].txt']
         removes(filename)
         print('🟢 End download')
+        auto_clean_dataset(DATA_DIR)
     except Exception as e:
         print(f'🔴 Error download:{e}')
 
