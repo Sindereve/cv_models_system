@@ -39,7 +39,7 @@ class BaseTrainer:
             experiment_name: Имя эксперимента в MLflow
             run_name: Уникальное имя запуска в MLflow
         """
-        self._validate_input()
+        self._validate_input(model, train_loader, val_loader)
         print("⚪ Start init")
         
         self.model = model
@@ -63,15 +63,20 @@ class BaseTrainer:
 
         print("🟢 Finish init")
 
-    def _validate_input(self):
+    def _validate_input(
+            self, 
+            model: nn.Module, 
+            train_loader: DataLoader, 
+            val_loader: DataLoader
+        ):
         """
         Валидация входных данных
         """
-        if not isinstance(self.model, nn.Module):
+        if not isinstance(model, nn.Module):
             raise TypeError("model must be nn.Module")
-        if not isinstance(self.train_loader, DataLoader):
+        if not isinstance(train_loader, DataLoader):
             raise TypeError("train_loader must be DataLoader")
-        if not isinstance(self.val_loader, DataLoader):
+        if not isinstance(val_loader, DataLoader):
             raise TypeError("val_loader must be DataLoader")
 
     def _setup_device(self, device: Optional[torch.device] = None):
