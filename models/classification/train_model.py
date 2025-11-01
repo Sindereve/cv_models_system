@@ -27,6 +27,7 @@ class BaseTrainer:
         """
         
         """
+        self._validate_input()
         print("⚪ Start init")
         
         self.model = model
@@ -56,7 +57,21 @@ class BaseTrainer:
         print("Val sample:", len(self.val_loader.dataset))
         print("🟢 Finish init")
 
+    def _validate_input(self):
+        """
+        Валидация входных данных
+        """
+        if not isinstance(self.model, nn.Module):
+            raise TypeError("model must be nn.Module")
+        if not isinstance(self.train_loader, DataLoader):
+            raise TypeError("train_loader must be DataLoader")
+        if not isinstance(self.val_loader, DataLoader):
+            raise TypeError("val_loader must be DataLoader")
+
     def _setup_device(self, device: Optional[torch.device] = None):
+        """
+        Настройка используемого памяти для обучения
+        """
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
@@ -199,7 +214,7 @@ class BaseTrainer:
             leave=False
         )
 
-    def _validate(
+    def _validate_one(
             self
         ) -> None:
         """
@@ -259,6 +274,6 @@ class BaseTrainer:
             print("="*50)
             print(f"🔄 Epoch[🔹{epoch+1}/{epochs}🔹] start")
             self._train_one_epoch()
-            self._validate()
+            self._validate_one()
             
         print("🟢[train] Completed!!!")
