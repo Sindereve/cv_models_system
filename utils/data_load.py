@@ -1,14 +1,16 @@
 import torch
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 def load_dataloader(
         data_dir: str,
         img_w_size: int = 224,
         img_h_size: int = 224,
+        total_img: int = 0,
         batch_size: int = 32,
-        train_ration: float = 0.8
+        train_ration: float = 0.8,
+        is_calculate_normalize_dataset: bool = True
     ) -> tuple[DataLoader, DataLoader, list[str]]:
     """
     Созданиём Dataloader для тренировки
@@ -17,8 +19,10 @@ def load_dataloader(
         data_dir: путь к папке с данными
         img_w_size: ширина изображений после преобразований
         img_h_size: высота изображений после преобразований
+        total_img: количество изображений, которое нужно
         batch_size: размер батчей
         train_ration: отношение тренировочных данных к всем данным
+        is_calculate_normalize_dataset: нужно ли нормализировать наши данные
 
     Returns:
         Dataloader: Dataloader для тренировочных данных
@@ -43,29 +47,52 @@ def load_dataloader(
         shuffle=False,
     )
 
-    mean, std = calculate_normalize_datasets(temp_loader)
+    classes = temp_loader.dataset.classes
+
+    if is_calculate_normalize_dataset:
+        print("🟣[normalize_dataset] processing")
+        mean, std = calculate_normalize_datasets(temp_loader)
     
-    print("🟣[load_dataloader] ")
-    train_transform = transforms.Compose([
-        transforms.RandomResizedCrop(
-            size=(img_h_size, img_w_size),
-            scale=(0.7, 1.0)
-        ),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomRotation(10),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std)
-    ])
+        train_transform = transforms.Compose([
+            transforms.RandomResizedCrop(
+                size=(img_h_size, img_w_size),
+                scale=(0.7, 1.0)
+            ),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(10),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)
+        ])
 
-    val_transform = transforms.Compose([
-        transforms.Resize(size=(img_h_size, img_w_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std)
-    ])
+        val_transform = transforms.Compose([
+            transforms.Resize(size=(img_h_size, img_w_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)
+        ])
+    else:
+        train_transform = transforms.Compose([
+            transforms.RandomResizedCrop(
+                size=(img_h_size, img_w_size),
+                scale=(0.7, 1.0)
+            ),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(10),
+            transforms.ToTensor(),
+        ])
 
-    datasets_size = len(temp_dataset)
-    train_size = int(train_ration * datasets_size)
-    val_size = datasets_size - train_size
+        val_transform = transforms.Compose([
+            transforms.Resize(size=(img_h_size, img_w_size)),
+            transforms.ToTensor(),
+        ])
+
+    if total_img == 0:
+        total_img = len(temp_dataset)
+
+    indxs = torch.randperm(len(temp_dataset))[:total_img]
+    temp_dataset = Subset(temp_dataset, indxs)
+
+    train_size = int(train_ration * total_img)
+    val_size = total_img - train_size
 
     train_dataset, val_dataset = torch.utils.data.random_split(
         temp_dataset, [train_size, val_size]
@@ -89,9 +116,9 @@ def load_dataloader(
     print("🟢[load_dataloader] finish create dataloaders")
     print(f" - Train samples: {len(train_dataset)}")
     print(f" - Val samples:   {len(val_dataset)}")
-    print(f" - Classes:       {temp_dataset.classes}")
+    print(f" - Classes:       {classes}")
 
-    return train_loader, val_loader, temp_dataset.classes
+    return train_loader, val_loader, classes
 
 def calculate_normalize_datasets(
         dataloader: DataLoader
