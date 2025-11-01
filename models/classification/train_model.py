@@ -28,7 +28,10 @@ class BaseTrainer:
         
         """
         print("⚪ Start init")
+        
         self.model = model
+        "нейронная сеть"
+
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.log_mlflow = log_mlflow
@@ -37,7 +40,6 @@ class BaseTrainer:
 
         # device
         self._setup_device(device)
-        
         self.model.to(self.device)
 
         # loss and optimizer
@@ -45,19 +47,7 @@ class BaseTrainer:
         self.optimizer = optimizer or optim.Adam(self.model.parameters(), lr=0.001)
         self.scheduler = scheduler or lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=50)
 
-        self.metrics = {
-            'accuracy': 0,
-            'loss': 0
-        }
-
-        self.history = {
-            'train_loss': [], 'train_accuracy': [],
-            'val_loss': [], 'val_accuracy': [],
-            'learning_rate': []
-        }
-
-        self.best_weights = None
-        self.best_accuracy = 0.0
+        self._create_history()
         if self.log_mlflow:
             self._setup_mlflow()
 
@@ -76,6 +66,18 @@ class BaseTrainer:
             print("🟠 Внимание: ошибка использования 'CUDA', используется 'CPU'")
             self.device = torch.device('cpu')
         torch.cuda.empty_cache()
+
+    def _create_history(self):
+        """
+        Создаём историю обучения модели
+        """
+        self.history = {
+            'train_loss': [], 'train_accuracy': [],
+            'val_loss': [], 'val_accuracy': [],
+            'learning_rate': []
+        }
+        self.best_weights = None
+        self.best_accuracy = 0.0
 
     def _setup_mlflow(self):
         """
