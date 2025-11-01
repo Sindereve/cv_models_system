@@ -6,11 +6,8 @@ from torch import optim
 from torch.optim import Optimizer, lr_scheduler
 from torch.utils.data import DataLoader
 
-import sklearn
-
 import time
-from typing import Dict, Callable
-from collections import defaultdict
+from typing import Optional
 
 class BaseTrainer:
     def __init__(
@@ -18,13 +15,13 @@ class BaseTrainer:
             model: nn.Module,
             train_loader: DataLoader,
             val_loader: DataLoader,
-            loss_fn: nn.Module = None,
-            optimizer: Optimizer = None,
-            scheduler: lr_scheduler._LRScheduler = None,
-            device: torch.device = None,
+            loss_fn: Optional[nn.Module] = None,
+            optimizer: Optional[Optimizer] = None,
+            scheduler: Optional[lr_scheduler._LRScheduler] = None,
+            device: Optional[torch.device] = None,
             # next arg mlflow module
             experiment_name: str = "No_name",
-            run_name: str = None,
+            run_name: Optional[str] = None,
             log_mlflow: bool = True
         ):
         """
@@ -39,8 +36,8 @@ class BaseTrainer:
         self.run_name = run_name
 
         # device
-        self.device: str = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        torch.cuda.empty_cache()
+        self._setup_device(device)
+        
         self.model.to(self.device)
 
         # loss and optimizer
@@ -68,6 +65,17 @@ class BaseTrainer:
         print("Train sample:", len(self.train_loader.dataset))
         print("Val sample:", len(self.val_loader.dataset))
         print("🟢 Finish init")
+
+    def _setup_device(self, device: Optional[torch.device] = None):
+        if device is None:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = device
+        
+        if self.device.type == 'cuda' and not torch.cuda.is_available():
+            print("🟠 Внимание: ошибка использования 'CUDA', используется 'CPU'")
+            self.device = torch.device('cpu')
+        torch.cuda.empty_cache()
 
     def _setup_mlflow(self):
         """
@@ -120,8 +128,10 @@ class BaseTrainer:
 
     def _train_one_epoch(
             self,
-            epoch_index: int,
         ):
+        """
+        Проход по тренировочным данным и тренировка на них
+        """
 
         self.model.train()
 
@@ -176,6 +186,9 @@ class BaseTrainer:
             data_loader: DataLoader,
             desc: str = "process"
         ):
+        """
+        Быстрая настройка для красивого бара загрузки
+        """
         return tqdm(
             data_loader,
             desc=desc,
@@ -186,7 +199,10 @@ class BaseTrainer:
 
     def _validate(
             self
-        ):
+        ) -> None:
+        """
+        1 проход по валидационным данным
+        """
         self.model.eval()
 
         runner_loss = 0.0
@@ -227,14 +243,20 @@ class BaseTrainer:
     def train(
             self,
             epochs: int = 20,
-            lr: float = 0.001,
         ) -> nn.Module:
+        """
+        Полный цикл тренировки
+        
+        Args:
+            epoch: количество эпох для тренировки
+        """
+
         print("🔘[train] Start")
 
         for epoch in range(epochs):
             print("="*50)
             print(f"🔄 Epoch[🔹{epoch+1}/{epochs}🔹] start")
-            self._train_one_epoch(epoch)
+            self._train_one_epoch()
             self._validate()
             
         print("🟢[train] Completed!!!")
