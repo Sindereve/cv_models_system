@@ -20,24 +20,33 @@ class BaseTrainer:
             scheduler: Optional[lr_scheduler._LRScheduler] = None,
             device: Optional[torch.device] = None,
             # next arg mlflow module
+            log_mlflow: bool = True,
             experiment_name: str = "No_name",
             run_name: Optional[str] = None,
-            log_mlflow: bool = True
         ):
         """
+        Инициализация тренера модели
         
+        Args:
+            model: Нейронная сеть для обучения
+            train_loader: Данные для обучения
+            val_loader: Данные для валидации
+            loss_fn: Функция потерь
+            optimizer: Оптимизатор
+            scheduler: Планировщик learning rate (optional)
+            device: Устройство вычислений GPU\CPU
+            log_mlflow: Флаг логирования в MLflow
+            experiment_name: Имя эксперимента в MLflow
+            run_name: Уникальное имя запуска в MLflow
         """
         self._validate_input()
         print("⚪ Start init")
         
         self.model = model
-        "нейронная сеть"
-
         self.train_loader = train_loader
+        print(" ➖ Train load sample:", len(self.train_loader.dataset))
         self.val_loader = val_loader
-        self.log_mlflow = log_mlflow
-        self.experiment_name = experiment_name
-        self.run_name = run_name
+        print(" ➖ Val load sample:  ", len(self.val_loader.dataset))
 
         # device
         self._setup_device(device)
@@ -49,12 +58,9 @@ class BaseTrainer:
         self.scheduler = scheduler or lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=50)
 
         self._create_history()
-        if self.log_mlflow:
-            self._setup_mlflow()
 
-        print("Training on:", self.device)
-        print("Train sample:", len(self.train_loader.dataset))
-        print("Val sample:", len(self.val_loader.dataset))
+        self._setup_mlflow(log_mlflow, experiment_name, run_name)
+
         print("🟢 Finish init")
 
     def _validate_input(self):
@@ -81,6 +87,7 @@ class BaseTrainer:
             print("🟠 Внимание: ошибка использования 'CUDA', используется 'CPU'")
             self.device = torch.device('cpu')
         torch.cuda.empty_cache()
+        print(" ➖ Training on:", self.device)
 
     def _create_history(self):
         """
@@ -94,20 +101,37 @@ class BaseTrainer:
         self.best_weights = None
         self.best_accuracy = 0.0
 
-    def _setup_mlflow(self):
+    def _setup_mlflow(
+            self,
+            log_mlflow: bool,
+            experiment_name: str,
+            run_name: str,
+        ):
         """
         Настройка MLFlow эксперемента
+
+        Args:
+            log_mlflow: MLflow вкл/выкл
+            experiment_name: Имя эксперемента
+            run_name: Уникальное имя запуска
         """
+        if not log_mlflow:
+            print(" ➖ log in Mlflow: OFF")
+            return
+
         try:
+            self.run_name = run_name
+            self.experiment_name = experiment_name
+
             mlflow.set_experiment(self.experiment_name)
-            
+
             if self.run_name is None:
                 time_str = time.strftime('%Y%m%d_%H%M%S')
                 self.run_name = f"{self.model.__class__.__name__}_{time_str}"
 
             self.mlflow_run = mlflow.start_run(run_name=self.run_name)
             self._log_model_parameters()
-            
+            print(" ➖ log in Mlflow: On")
         except Exception as e:
             print("🔴[MLFlow] Error seting:", e)
             self.log_mlflow = False
