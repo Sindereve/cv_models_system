@@ -114,9 +114,9 @@ def load_dataloader(
     )
 
     print("🟢[load_dataloader] finish create dataloaders")
-    print(f" - Train samples: {len(train_dataset)}")
-    print(f" - Val samples:   {len(val_dataset)}")
-    print(f" - Classes:       {classes}")
+    print(f" ➖ Train samples: {len(train_dataset)}")
+    print(f" ➖ Val samples:   {len(val_dataset)}")
+    print(f" ➖ Classes:       {classes}")
 
     return train_loader, val_loader, classes
 
