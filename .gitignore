@@ -1,6 +1,8 @@
 # мусор 
 .venv
 .vs
+__pycache__
+mlruns
 
 # данные
 /data
