@@ -21,7 +21,7 @@ class BaseTrainer:
             device: Optional[torch.device] = None,
             # next arg mlflow module
             log_mlflow: bool = True,
-            experiment_name: str = "No_name",
+            experiment_name: str = "Experiment_name",
             run_name: Optional[str] = None,
         ):
         """
@@ -131,7 +131,7 @@ class BaseTrainer:
             mlflow.set_experiment(self.experiment_name)
 
             if self.run_name is None:
-                time_str = time.strftime('%Y%m%d_%H%M%S')
+                time_str = time.strftime('%Y:%m:%d_%H:%M:%S')
                 self.run_name = f"{self.model.__class__.__name__}_{time_str}"
 
             self.mlflow_run = mlflow.start_run(run_name=self.run_name)
@@ -140,37 +140,48 @@ class BaseTrainer:
         except Exception as e:
             print("🔴[MLFlow] Error seting:", e)
             self.log_mlflow = False
+            mlflow.end_run()
+            raise
 
     def _log_model_parameters(self):
         """
         Логирование параметров модели и обучения
         """
-        
-        model_params = {
-            'model_type': self.model.__class__.__name__,
-            'model_parameters': sum(p.numel for p in self.model.parameters()),
-            'device': self.device
-        }
+        try: 
+            model_params = {
+                'model_type': self.model.__class__.__name__,
+                'device': self.device.type,
+                'total_parameters': sum([p.numel() for p in self.model.parameters()])
+            }
 
-        optiizer_params = {
-            'optimizer': self.optimizer.__class__.__name__,
-            'learning_rate': self.optimizer.param_groups[0]['lr']
-        }
+            optiizer_params = {
+                'optimizer': self.optimizer.__class__.__name__,
+                'learning_rate': self.optimizer.param_groups[0]['lr']
+            }
 
-        for key, value in self.optimizer.param_groups[0].items():
-            if key != 'params':
-                optiizer_params[f'optimizer_{key}'] = value
+            for key, value in self.optimizer.param_groups[0].items():
+                if key != 'params':
+                    optiizer_params[f'optimizer_{key}'] = value
+            
+            data_params = {
+                'train_sample': len(self.train_loader.dataset),
+                'val_sample': len(self.val_loader.dataset),
+                'batch_size': self.train_loader.batch_size,
+                'num_classes': getattr(self.train_loader, 'num_classes', 'unknown')
+            }
+            
+            all_params = {
+                **model_params, 
+                **data_params,
+                **optiizer_params, 
+                
+            }
+            mlflow.log_params(all_params)
+            print('🔵[MLFlow] parameters model add in MLFlow')
+        except Exception as e:
+            print("🔴[MLFlow] Error set params model:", e)
+            raise
 
-        data_params = {
-            'train_sample': len(self.train_loader.dataset),
-            'val_sample': len(self.val_loader.dataset),
-            'batch_size': self.train_loader.batch_size,
-            'num_classes': getattr(self.train_loader, 'num_classes', 'unknown')
-        }
-
-        all_params = {**model_params, **optiizer_params, **data_params}
-        mlflow.log_params(all_params)
-        print('🔵[MLFlow] parameters model add in MLFlow')
 
     def _train_one_epoch(
             self,
