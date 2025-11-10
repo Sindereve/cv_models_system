@@ -21,8 +21,9 @@ class BaseTrainer:
             device: Optional[torch.device] = None,
             # next arg mlflow module
             log_mlflow: bool = True,
+            log_artifacts: bool = True,
             experiment_name: str = "Experiment_name",
-            run_name: Optional[str] = None,
+            run_name : Optional[str] = None,
         ):
         """
         Инициализация тренера модели
@@ -36,6 +37,7 @@ class BaseTrainer:
             scheduler: Планировщик learning rate (optional)
             device: Устройство вычислений GPU\CPU
             log_mlflow: Флаг логирования в MLflow
+            log_artifacts: Логирование артефактов
             experiment_name: Имя эксперимента в MLflow
             run_name: Уникальное имя запуска в MLflow
         """
@@ -57,8 +59,18 @@ class BaseTrainer:
         self.optimizer = optimizer or optim.Adam(self.model.parameters(), lr=0.001)
         self.scheduler = scheduler or lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=50)
 
-        self._create_history()
-
+        # metrics
+        self.history = {
+            'train_loss': [], 'train_accuracy': [],
+            'val_loss': [], 'val_accuracy': [],
+            'learning_rate': []
+        }
+        self.best_weights = None
+        self.best_accuracy = 0.0
+        
+        # mlflow
+        self.log_mlflow = log_mlflow
+        self.log_artifacts = log_artifacts
         self._setup_mlflow(log_mlflow, experiment_name, run_name)
 
         print("🟢 Finish init")
@@ -93,18 +105,7 @@ class BaseTrainer:
             self.device = torch.device('cpu')
         torch.cuda.empty_cache()
         print(" ➖ Training on:", self.device)
-
-    def _create_history(self):
-        """
-        Создаём историю обучения модели
-        """
-        self.history = {
-            'train_loss': [], 'train_accuracy': [],
-            'val_loss': [], 'val_accuracy': [],
-            'learning_rate': []
-        }
-        self.best_weights = None
-        self.best_accuracy = 0.0
+        
 
     def _setup_mlflow(
             self,
@@ -113,12 +114,7 @@ class BaseTrainer:
             run_name: str,
         ):
         """
-        Настройка MLFlow эксперемента
-
-        Args:
-            log_mlflow: MLflow вкл/выкл
-            experiment_name: Имя эксперемента
-            run_name: Уникальное имя запуска
+        Настройка MLFlow эксперимента с обработкой ошибок
         """
         if not log_mlflow:
             print(" ➖ log in Mlflow: OFF")
@@ -128,7 +124,15 @@ class BaseTrainer:
             self.run_name = run_name
             self.experiment_name = experiment_name
 
-            mlflow.set_experiment(self.experiment_name)
+            # Пытаемся установить эксперимент, если не получается - создаем новый
+            try:
+                mlflow.set_experiment(self.experiment_name)
+            except:
+                # Если эксперимент удален, создаем новый с временной меткой
+                self.experiment_name = f"{experiment_name}_new_{int(time.time())}"
+                mlflow.create_experiment(self.experiment_name)
+                mlflow.set_experiment(self.experiment_name)
+                print(f"🔵[MLFlow] Created new experiment: {self.experiment_name}")
 
             if self.run_name is None:
                 time_str = time.strftime('%Y:%m:%d_%H:%M:%S')
@@ -137,11 +141,15 @@ class BaseTrainer:
             self.mlflow_run = mlflow.start_run(run_name=self.run_name)
             self._log_model_parameters()
             print(" ➖ log in Mlflow: On")
+            
         except Exception as e:
-            print("🔴[MLFlow] Error seting:", e)
+            print("🔴[MLFlow] Error setting:", e)
             self.log_mlflow = False
-            mlflow.end_run()
-            raise
+            try:
+                mlflow.end_run()
+            except:
+                pass
+            print("🟠[MLFlow] Continuing without MLflow logging")
 
     def _log_model_parameters(self):
         """
@@ -181,6 +189,118 @@ class BaseTrainer:
         except Exception as e:
             print("🔴[MLFlow] Error set params model:", e)
             raise
+
+
+    def _log_epoch_metric(
+            self, 
+            epoch: int
+        ):
+        """
+        Логирование метрик эпохи в MLflow
+        """
+        if not self.log_mlflow:
+            return
+        try:
+            metrics = {
+                'train_loss': self.history['train_loss'][-1],
+                'train_accuracy': self.history['train_accuracy'][-1],
+                'val_loss': self.history['val_loss'][-1],
+                'val_accuracy': self.history['val_accuracy'][-1],
+                'learning_rate': self.history['learning_rate'][-1],
+                'epoch': epoch
+            }
+
+            mlflow.log_metrics(metrics, step=epoch)
+
+        except Exception as e:
+            print("🔴[MLFlow] Error set params model:", e)
+
+
+    def _log_model_checkpoint(self, epoch: int, is_best: bool = False):
+        """
+        Логирование чекпоинтов модели
+        """
+        if not self.log_mlflow or not self.log_artifacts:
+            return
+            
+        try:
+            # Сохраняем модель
+            model_info = mlflow.pytorch.log_model(
+                self.model,
+                "model",
+                registered_model_name=f"{self.model.__class__.__name__}",
+            )
+            
+            # Если это лучшая модель, логируем отдельно
+            if is_best:
+                mlflow.pytorch.log_model(
+                    self.model,
+                    "best_model",
+                    registered_model_name=f"{self.model.__class__.__name__}_best",
+                )
+                mlflow.log_metric("best_val_accuracy", self.history['val_accuracy'][-1])
+                
+        except Exception as e:
+            print(f"🔴[MLFlow] Error logging model: {e}")
+
+    def _log_training_artifacts(self):
+        """
+        Логирование дополнительных артефактов
+        """
+        if not self.log_mlflow or not self.log_artifacts:
+            return
+            
+        try:
+            import matplotlib.pyplot as plt
+            import os
+            import tempfile
+            
+            # Создаем временную директорию для артефактов
+            with tempfile.TemporaryDirectory() as temp_dir:
+                
+                # График потерь
+                plt.figure(figsize=(12, 4))
+                
+                plt.subplot(1, 2, 1)
+                plt.plot(self.history['train_loss'], label='Train Loss')
+                plt.plot(self.history['val_loss'], label='Val Loss')
+                plt.title('Model Loss')
+                plt.xlabel('Epoch')
+                plt.ylabel('Loss')
+                plt.legend()
+                plt.grid(True)
+                
+                plt.subplot(1, 2, 2)
+                plt.plot(self.history['train_accuracy'], label='Train Accuracy')
+                plt.plot(self.history['val_accuracy'], label='Val Accuracy')
+                plt.title('Model Accuracy')
+                plt.xlabel('Epoch')
+                plt.ylabel('Accuracy')
+                plt.legend()
+                plt.grid(True)
+                
+                plt.tight_layout()
+                loss_plot_path = os.path.join(temp_dir, 'training_metrics.png')
+                plt.savefig(loss_plot_path)
+                plt.close()
+                
+                mlflow.log_artifact(loss_plot_path)
+                
+                # Логируем историю обучения в файл
+                history_path = os.path.join(temp_dir, 'training_history.txt')
+                with open(history_path, 'w') as f:
+                    f.write("Epoch\tTrain_Loss\tTrain_Acc\tVal_Loss\tVal_Acc\tLR\n")
+                    for i in range(len(self.history['train_loss'])):
+                        f.write(f"{i+1}\t{self.history['train_loss'][i]:.4f}\t"
+                               f"{self.history['train_accuracy'][i]:.4f}\t"
+                               f"{self.history['val_loss'][i]:.4f}\t"
+                               f"{self.history['val_accuracy'][i]:.4f}\t"
+                               f"{self.history['learning_rate'][i]:.6f}\n")
+                
+                mlflow.log_artifact(history_path)
+                
+        except Exception as e:
+            print(f"🔴[MLFlow] Error logging artifacts: {e}")
 
 
     def _train_one_epoch(
@@ -316,4 +436,20 @@ class BaseTrainer:
             self._train_one_epoch()
             self._validate_one()
             
+            self._log_epoch_metric(epoch+1)
+            is_best = self.history['val_accuracy'][-1] == self.best_accuracy
+            if is_best:
+                self._log_model_checkpoint(epoch + 1, is_best=True)
+
+            print(f"✅ Epoch[🔹{epoch+1}/{epochs}🔹] completed")
+
+        # Логируем все артефакты
+        self._log_training_artifacts()
+
+        if self.best_weights is not None:
+            self.model.load_state_dict(self.best_weights)
+
+        if self.log_mlflow:
+            mlflow.end_run()
+
         print("🟢[train] Completed!!!")
