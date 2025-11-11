@@ -446,6 +446,8 @@ class BaseTrainer:
 
         if self.best_weights is not None:
             self.model.load_state_dict(self.best_weights)
+            mlflow.pytorch.log_model(self.model, name=self.model.__class__.__name__)
+            
 
         if self.log_mlflow:
             mlflow.end_run()
