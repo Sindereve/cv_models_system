@@ -71,7 +71,9 @@ class BaseTrainer:
         # mlflow
         self.log_mlflow = log_mlflow
         self.log_artifacts = log_artifacts
-        self._setup_mlflow(log_mlflow, experiment_name, run_name)
+        self.experiment_name = experiment_name
+        self.run_name = run_name
+        self._setup_mlflow()
 
         print("🟢 Finish init")
 
@@ -109,27 +111,19 @@ class BaseTrainer:
 
     def _setup_mlflow(
             self,
-            log_mlflow: bool,
-            experiment_name: str,
-            run_name: str,
         ):
         """
         Настройка MLFlow эксперимента с обработкой ошибок
         """
-        if not log_mlflow:
+        if not self.log_mlflow:
             print(" ➖ log in Mlflow: OFF")
             return
 
         try:
-            self.run_name = run_name
-            self.experiment_name = experiment_name
-
             # Пытаемся установить эксперимент, если не получается - создаем новый
             try:
                 mlflow.set_experiment(self.experiment_name)
             except:
-                # Если эксперимент удален, создаем новый с временной меткой
-                self.experiment_name = f"{experiment_name}_new_{int(time.time())}"
                 mlflow.create_experiment(self.experiment_name)
                 mlflow.set_experiment(self.experiment_name)
                 print(f"🔵[MLFlow] Created new experiment: {self.experiment_name}")
@@ -138,10 +132,14 @@ class BaseTrainer:
                 time_str = time.strftime('%Y:%m:%d_%H:%M:%S')
                 self.run_name = f"{self.model.__class__.__name__}_{time_str}"
 
-            self.mlflow_run = mlflow.start_run(run_name=self.run_name)
-            self._log_model_parameters()
-            print(" ➖ log in Mlflow: On")
+            try:
+                self.mlflow_run = mlflow.start_run(run_name=self.run_name)
+                self._log_model_parameters()
+                print(" ➖ log in Mlflow: On")
+            except:
+                print(f"🔵[MLFlow] Created new run:{self.run_name}")
             
+            print(" ➖ log in Mlflow: On")
         except Exception as e:
             print("🔴[MLFlow] Error setting:", e)
             self.log_mlflow = False
