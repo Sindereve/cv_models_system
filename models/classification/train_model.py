@@ -122,7 +122,6 @@ class BaseTrainer:
         try:
             # Настройка MLflow
             mlflow.set_tracking_uri('http://127.0.0.1:5000')
-            
             mlflow.set_experiment(self.experiment_name)
 
             if self.run_name is None:
@@ -132,7 +131,7 @@ class BaseTrainer:
             print(f"🔵[MLFlow] Starting run: {self.run_name}")
             try:
                 self.mlflow_run = mlflow.start_run(run_name=self.run_name)
-            except MlflowException as e:
+            except Exception as e:
                 mlflow.end_run()
                 self.mlflow_run = mlflow.start_run(run_name=self.run_name)
                 print(f"🔵[MLFlow] Stop old run_name started successfully: {self.mlflow_run.info.run_id}")
