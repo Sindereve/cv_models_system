@@ -1,4 +1,5 @@
 import mlflow
+from mlflow.exceptions import MlflowException
 from tqdm import tqdm
 import torch
 from torch import nn
@@ -8,6 +9,9 @@ from torch.utils.data import DataLoader
 
 import time
 from typing import Optional
+
+import os
+os.environ['MLFLOW_SUPPRESS_RUN_LOGS']= 'true'
 
 class BaseTrainer:
     def __init__(
@@ -66,14 +70,12 @@ class BaseTrainer:
             'learning_rate': []
         }
         self.best_weights = None
-        self.best_accuracy = 0.0
         
         # mlflow
         self.log_mlflow = log_mlflow
         self.log_artifacts = log_artifacts
         self.experiment_name = experiment_name
         self.run_name = run_name
-        self._setup_mlflow()
 
         print("🟢 Finish init")
 
@@ -109,45 +111,43 @@ class BaseTrainer:
         print(" ➖ Training on:", self.device)
         
 
-    def _setup_mlflow(
-            self,
-        ):
+    def _setup_mlflow(self):
         """
-        Настройка MLFlow эксперимента с обработкой ошибок
+        Настройка MLFlow с предварительной проверкой сервера
         """
         if not self.log_mlflow:
             print(" ➖ log in Mlflow: OFF")
             return
 
         try:
-            # Пытаемся установить эксперимент, если не получается - создаем новый
-            try:
-                mlflow.set_experiment(self.experiment_name)
-            except:
-                mlflow.create_experiment(self.experiment_name)
-                mlflow.set_experiment(self.experiment_name)
-                print(f"🔵[MLFlow] Created new experiment: {self.experiment_name}")
+            # Настройка MLflow
+            mlflow.set_tracking_uri('http://127.0.0.1:5000')
+            
+            mlflow.set_experiment(self.experiment_name)
 
             if self.run_name is None:
                 time_str = time.strftime('%Y:%m:%d_%H:%M:%S')
                 self.run_name = f"{self.model.__class__.__name__}_{time_str}"
 
+            print(f"🔵[MLFlow] Starting run: {self.run_name}")
             try:
                 self.mlflow_run = mlflow.start_run(run_name=self.run_name)
-                self._log_model_parameters()
-                print(" ➖ log in Mlflow: On")
-            except:
-                print(f"🔵[MLFlow] Created new run:{self.run_name}")
+            except MlflowException as e:
+                mlflow.end_run()
+                self.mlflow_run = mlflow.start_run(run_name=self.run_name)
+                print(f"🔵[MLFlow] Stop old run_name started successfully: {self.mlflow_run.info.run_id}")
+
+            print(f"🔵[MLFlow] Tracking URI: {mlflow.get_tracking_uri()}")
+            print(f"🔵[MLFlow] Artifact URI: {mlflow.get_artifact_uri()}")
+            print(f"🟢[MLFlow] Run started successfully: {self.mlflow_run.info.run_id}")
             
-            print(" ➖ log in Mlflow: On")
         except Exception as e:
-            print("🔴[MLFlow] Error setting:", e)
+            print(f"🔴[MLFlow] Setup failed: {e}")
             self.log_mlflow = False
             try:
                 mlflow.end_run()
             except:
                 pass
-            print("🟠[MLFlow] Continuing without MLflow logging")
 
     def _log_model_parameters(self):
         """
@@ -214,7 +214,7 @@ class BaseTrainer:
             print("🔴[MLFlow] Error set params model:", e)
 
 
-    def _log_model_checkpoint(self, epoch: int, is_best: bool = False):
+    def _log_model_checkpoint(self, epoch: int):
         """
         Логирование чекпоинтов модели
         """
@@ -222,22 +222,10 @@ class BaseTrainer:
             return
             
         try:
-            # Сохраняем модель
-            model_info = mlflow.pytorch.log_model(
+            mlflow.pytorch.log_model(
                 self.model,
-                "model",
-                registered_model_name=f"{self.model.__class__.__name__}",
+                name=f"checkpoint_epoch_{epoch}"
             )
-            
-            # Если это лучшая модель, логируем отдельно
-            if is_best:
-                mlflow.pytorch.log_model(
-                    self.model,
-                    "best_model",
-                    registered_model_name=f"{self.model.__class__.__name__}_best",
-                )
-                mlflow.log_metric("best_val_accuracy", self.history['val_accuracy'][-1])
-                
         except Exception as e:
             print(f"🔴[MLFlow] Error logging model: {e}")
 
@@ -250,7 +238,6 @@ class BaseTrainer:
             
         try:
             import matplotlib.pyplot as plt
-            import os
             import tempfile
             
             # Создаем временную директорию для артефактов
@@ -425,8 +412,12 @@ class BaseTrainer:
         Args:
             epoch: количество эпох для тренировки
         """
-
         print("🔘[train] Start")
+        best_val_loss = 0.0
+
+        if self.log_mlflow:
+            self._setup_mlflow()
+            self._log_model_parameters()
 
         for epoch in range(epochs):
             print("="*50)
@@ -435,19 +426,21 @@ class BaseTrainer:
             self._validate_one()
             
             self._log_epoch_metric(epoch+1)
-            is_best = self.history['val_accuracy'][-1] == self.best_accuracy
-            if is_best:
-                self._log_model_checkpoint(epoch + 1, is_best=True)
+            if best_val_loss < self.history['val_loss'][-1]:
+                best_val_loss = self.history['val_loss'][-1]
+                self._log_model_checkpoint(epoch + 1)
 
-            print(f"✅ Epoch[🔹{epoch+1}/{epochs}🔹] completed")
+            print(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
 
         # Логируем все артефакты
         self._log_training_artifacts()
 
         if self.best_weights is not None:
             self.model.load_state_dict(self.best_weights)
-            mlflow.pytorch.log_model(self.model, name=self.model.__class__.__name__)
-            
+            mlflow.pytorch.log_model(
+                self.model, 
+                name=self.model.__class__.__name__
+            )
 
         if self.log_mlflow:
             mlflow.end_run()

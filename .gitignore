@@ -6,3 +6,4 @@ mlruns
 
 # данные
 /data
+mlflow.db
