@@ -111,7 +111,11 @@ class BaseTrainer:
         print(" ➖ Training on:", self.device)
         
 
-    def _setup_mlflow(self):
+    def _setup_mlflow(
+            self,
+            epoch: int,
+            lr: int
+        ):
         """
         Настройка MLFlow с предварительной проверкой сервера
         """
@@ -125,8 +129,8 @@ class BaseTrainer:
             mlflow.set_experiment(self.experiment_name)
 
             if self.run_name is None:
-                time_str = time.strftime('%Y:%m:%d_%H:%M:%S')
-                self.run_name = f"{self.model.__class__.__name__}_{time_str}"
+                time_str = time.strftime('%m:%d_%H:%M:%S')
+                self.run_name = f"{self.model.__class__.__name__}_ep{epoch}_lr{lr}_time({time_str})"
 
             print(f"🔵[MLFlow] Starting run: {self.run_name}")
             try:
@@ -415,7 +419,7 @@ class BaseTrainer:
         best_val_loss = 0.0
 
         if self.log_mlflow:
-            self._setup_mlflow()
+            self._setup_mlflow(epochs, self.optimizer.param_groups[0]['lr'])
             self._log_model_parameters()
 
         for epoch in range(epochs):
