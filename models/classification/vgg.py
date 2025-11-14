@@ -1,7 +1,11 @@
 from torch import nn
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152, ResNet
+from torchvision.models import (
+    vgg11, vgg11_bn, vgg13, vgg13_bn,
+    vgg16, vgg16_bn, vgg19, vgg19_bn,
+    VGG
+)
 
-class ResNet(nn.Module):
+class VGG(nn.Module):
     def __init__(
             self, 
             num_class: int,
@@ -9,21 +13,20 @@ class ResNet(nn.Module):
             weights: bool = False,
         ):
         """
-        Загрузка одной из моделей ResNet
+        Загрузка одной из моделей VGG
 
         Params: 
             num_classes: количество классов
-            model_name: имя модели ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152']
+            model_name: имя модели ['vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn', 'vgg19', 'vgg19_bn']
             weights: если True - загружает веса
         """
         super().__init__()
 
-
-        self.model = self._load_model(model_name, weights)
+        self.model: VGG = self._load_model(model_name, weights)
         self.model_name = model_name
 
-        in_features = self.model.fc.in_features
-        self.model.fc = nn.Linear(in_features, num_class)
+        in_features = self.model.classifier[6].in_features
+        self.model.classifier[6] = nn.Linear(in_features, num_class)
 
     def forward(self, x):
         return self.model(x)
@@ -38,9 +41,9 @@ class ResNet(nn.Module):
             self,
             model_name: str,
             weights: bool
-        ) -> ResNet:
+        ) -> VGG:
         """
-        Загрузка модели ResNet с опциональными предобученными весами.
+        Загрузка модели VGG с опциональными предобученными весами.
 
         Params:
             model_name: имя модели
@@ -48,19 +51,22 @@ class ResNet(nn.Module):
         """
 
         model_mapping = {
-            "resnet18": resnet18,
-            "resnet34": resnet34, 
-            "resnet50": resnet50,
-            "resnet101": resnet101,
-            "resnet152": resnet152
+            "vgg11": vgg11,
+            "vgg11_bn": vgg11_bn, 
+            "vgg13": vgg13,
+            "vgg13_bn": vgg13_bn,
+            "vgg16": vgg16,
+            "vgg16_bn": vgg16_bn,
+            "vgg19": vgg19,
+            "vgg19_bn": vgg19_bn
         }
         
         if model_name not in model_mapping:
             raise ValueError(f"Unknown model name: {model_name}. Available: {list(model_mapping.keys())}")
 
-        model: ResNet = model_mapping[model_name](weights="DEFAULT" if weights else None)
+        model: VGG = model_mapping[model_name](weights="DEFAULT" if weights else None)
         
-        # Заморозка весов
+        # Замарозка весов
         if weights:
             for param in model.parameters():
                 param.requires_grad = False
