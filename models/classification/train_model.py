@@ -1,5 +1,5 @@
 import mlflow
-from mlflow.exceptions import MlflowException
+from mlflow.models.signature import infer_signature
 from tqdm import tqdm
 import torch
 from torch import nn
@@ -225,12 +225,26 @@ class BaseTrainer:
             return
             
         try:
+            name = f"checkpoint_epoch_{epoch}"
             mlflow.pytorch.log_model(
                 self.model,
-                name=f"checkpoint_epoch_{epoch}"
+                name=name,
+                signature= self._create_mlflow_signature()
             )
+            print(f"🔵[MLFlow] log model ({name})")
         except Exception as e:
             print(f"🔴[MLFlow] Error logging model: {e}")
+
+    def _create_mlflow_signature(self):
+        sample_batch = next(iter(self.train_loader))
+
+        sample_inputs = sample_batch[0][:5]
+        sample_targets = sample_batch[1][:5]
+
+        return infer_signature(
+            model_input=sample_inputs.numpy(),
+            model_output=sample_targets.numpy()
+        )
 
     def _log_training_artifacts(self):
         """
