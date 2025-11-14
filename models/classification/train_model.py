@@ -416,7 +416,7 @@ class BaseTrainer:
             epoch: количество эпох для тренировки
         """
         print("🔘[train] Start")
-        best_val_loss = 0.0
+        best_val_acc = 0.0
 
         if self.log_mlflow:
             self._setup_mlflow(epochs, self.optimizer.param_groups[0]['lr'])
@@ -429,21 +429,15 @@ class BaseTrainer:
             self._validate_one()
             
             self._log_epoch_metric(epoch+1)
-            if best_val_loss < self.history['val_loss'][-1]:
-                best_val_loss = self.history['val_loss'][-1]
+
+            if best_val_acc < self.history['val_accuracy'][-1]:
+                best_val_acc = self.history['val_accuracy'][-1]
                 self._log_model_checkpoint(epoch + 1)
 
             print(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
 
         # Логируем все артефакты
         self._log_training_artifacts()
-
-        if self.best_weights is not None:
-            self.model.load_state_dict(self.best_weights)
-            mlflow.pytorch.log_model(
-                self.model, 
-                name=self.model.__class__.__name__
-            )
 
         if self.log_mlflow:
             mlflow.end_run()
