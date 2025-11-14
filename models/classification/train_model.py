@@ -11,7 +11,7 @@ import time
 from typing import Optional
 
 import os
-os.environ['MLFLOW_SUPPRESS_RUN_LOGS']= 'true'
+os.environ['MLFLOW_SUPPRESS_RUN_LOGS'] = 'true'
 
 class BaseTrainer:
     def __init__(
