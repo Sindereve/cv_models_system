@@ -4,13 +4,13 @@ from torchvision import transforms, datasets
 from torch.utils.data import DataLoader, Subset
 from typing import Tuple, List
 
-from detection import DetectionDataset
-from tools import calculate_normalize_datasets, denormalize_image
+from .detection import DetectionDataset
+from .tools import calculate_normalize_datasets, denormalize_image
 
 __all__ = [denormalize_image, calculate_normalize_datasets]
 
 def load_dataloader_classification(
-        data_dir: str,
+        path_data_dir: str,
         img_w_size: int = 224,
         img_h_size: int = 224,
         total_img: int = 0,
@@ -22,7 +22,7 @@ def load_dataloader_classification(
     Созданиём Dataloader
 
     Args:
-        data_dir: путь к папке с данными
+        path_data_dir: путь к папке с данными
         img_w_size: ширина изображений после преобразований
         img_h_size: высота изображений после преобразований
         total_img: количество изображений, которое нужно
@@ -43,7 +43,7 @@ def load_dataloader_classification(
     ])
 
     temp_dataset = datasets.ImageFolder(
-        root=data_dir,
+        root=path_data_dir,
         transform=base_transform
     )
 
@@ -127,7 +127,7 @@ def load_dataloader_classification(
     return train_loader, val_loader, classes
 
 def load_dataloader_detection(
-        path: str,
+        path_data_dir: str,
         img_w_size: int = 224,
         img_h_size: int = 224,
         total_img: int = 0,
@@ -137,7 +137,7 @@ def load_dataloader_detection(
     
     print("⚪[load_dataloader_detection] start create dataloaders")
 
-    with open(path+'/data.yaml', 'r') as f:
+    with open(path_data_dir+'/data.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
     train_path =  config['train']
@@ -146,13 +146,13 @@ def load_dataloader_detection(
 
     train_dataset = DetectionDataset(
         images_dir=train_path,
-        global_path=path,
+        global_path=path_data_dir,
         img_size=(img_h_size, img_w_size)
     )
 
     val_dataset = DetectionDataset(
         images_dir=val_path,
-        global_path=path,
+        global_path=path_data_dir,
         img_size=(img_h_size, img_w_size)
     )
 
