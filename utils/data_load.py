@@ -1,4 +1,5 @@
 import os
+import yaml
 from pathlib import Path
 
 import torch
@@ -17,7 +18,7 @@ def load_dataloader(
         batch_size: int = 32,
         train_ration: float = 0.8,
         is_calculate_normalize_dataset: bool = True
-    ) -> tuple[DataLoader, DataLoader, list[str]]:
+    ) -> Tuple[DataLoader, DataLoader, List[str]]:
     """
     Созданиём Dataloader
 
@@ -125,6 +126,73 @@ def load_dataloader(
     print(f" ➖ Classes:       {classes}")
 
     return train_loader, val_loader, classes
+
+def load_dataloader_detection(
+        path: str,
+        img_w_size: int = 224,
+        img_h_size: int = 224,
+        total_img: int = 0,
+        batch_size: int = 32,
+        train_ration: float = 0.8,
+    ) -> Tuple[DataLoader, DataLoader, List[str]]:
+    with open(path+'/data.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+
+    train_path =  config['train']
+    val_path =  config['val']
+
+    classes = config['names']
+
+    train_dataset = DetectionDataset(
+        images_dir=train_path,
+        global_path=path,
+        img_size=(img_h_size, img_w_size)
+    )
+
+    val_dataset = DetectionDataset(
+        images_dir=val_path,
+        global_path=path,
+        img_size=(img_h_size, img_w_size)
+    )
+
+    # Ограничиваем количество изображений
+    if total_img > 0:
+        train_count = int(total_img * train_ration)
+        val_count = total_img - train_count
+        
+        # Но не больше чем есть в датасетах
+        train_count = min(train_count, len(train_dataset))
+        val_count = min(val_count, len(val_dataset))
+        
+        # Создаем подмножества
+        train_indices = torch.randperm(len(train_dataset))[:train_count]
+        val_indices = torch.randperm(len(val_dataset))[:val_count]
+        
+        train_dataset = Subset(train_dataset, train_indices)
+        val_dataset = Subset(val_dataset, val_indices)
+    else:
+        train_dataset = train_dataset
+        val_dataset = val_dataset
+
+    def collate_fn(batch):
+        images, labels = zip(*batch)
+        images = torch.stack(images)
+        return images, labels
+
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        collate_fn=collate_fn
+    )
+
+    val_dataloader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        collate_fn=collate_fn
+    )
+
+    return train_dataloader, val_dataloader, classes
 
 def calculate_normalize_datasets(
         dataloader: DataLoader
@@ -312,3 +380,4 @@ class DetectionDataset(Dataset):
         image, orig_size = self.load_image(idx)
         labels = self.load_labels(idx, orig_size)
         return image, labels
+    
