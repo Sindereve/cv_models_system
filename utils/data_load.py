@@ -5,6 +5,7 @@ from tqdm import tqdm
 import os
 from typing import List, Tuple
 import glob
+from pathlib import Path
 
 def load_dataloader(
         data_dir: str,
@@ -177,24 +178,22 @@ def get_images_labels_path(
         global_path: str
     ) -> Tuple[List[str], List[str]]:
     
-    path = images_dir.replace('/images','').replace("..", global_path)
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Dir not found: {path}")
-    
-    path_images = path+'/images'
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Dir for images not found: {path_images}")
+    base_path = images_dir.replace('/images','').replace("..", global_path)
+    base_path = Path(base_path)
 
-    path_labels = path+'/labels'
-    if not os.path.exists(path):
+    path_images = base_path / 'images'
+    path_labels = base_path / 'labels'
+    
+    if not path_images.exists():
+        raise FileNotFoundError(f"Dir for images not found: {path_images}")
+    if not path_labels.exists:
         raise FileNotFoundError(f"Dir for labels not found: {path_labels}")
     
     image_ext = ['.png', '.jpg', 'jpeg']
     images_paths = []
-    labels_paths = []
     
     for ext in image_ext:
-        pattern = os.path.join(path_images, f'*{ext}')
+        pattern = str(path_images / f'*{ext}')
         images_paths.extend(glob.glob(pattern))
     
     if not images_paths:
@@ -205,22 +204,18 @@ def get_images_labels_path(
     missing_labels = []
 
     for img_path in images_paths:
-        img_name = os.path.splitext(os.path.basename(img_path))[0]
-        labels_paths = os.path.join(path_labels, f"{img_name}.txt")
+        img_path = Path(img_path)
+        img_name = img_path.stem
+        labels_paths = path_labels / f"{img_name}.txt"
 
         if os.path.exists(labels_paths):
             valid_image_paths.append(img_path)
-            valid_label_paths.append(labels_paths)
+            valid_label_paths.append(str(labels_paths))
         else:
             missing_labels.append(img_name)
 
     if missing_labels:
         print(f"Warning: {len(missing_labels)} изображения без labels файлов")
-        if len(missing_labels) > 5:
-            print(missing_labels[:5])
-        else:
-            print(missing_labels)
-
-    print(f"Валидных пар: {len(valid_image_paths)}")
+        print(f"Примеры: {missing_labels}")
 
     return images_paths, labels_paths
