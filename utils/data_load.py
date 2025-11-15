@@ -154,7 +154,7 @@ def calculate_normalize_datasets(
 def denormalize_image(
         tensor: torch.Tensor, 
         mean: torch.Tensor, 
-        std: torch.Tensor
+        std: torch.Tensor,
     ) -> torch.Tensor:
     """
     Денормализация для отображения
@@ -175,9 +175,23 @@ def denormalize_image(
 
 def get_images_labels_path(
         images_dir: str, 
-        global_path: str
+        global_path: str,
+        verbose: bool = False
     ) -> Tuple[List[str], List[str]]:
-    
+    """
+    Получаем пары изображение-метка для задачи детекции
+
+    Args: 
+        images_dir: путь к директории с изображениями
+        global_path: базовый путь для решения относительных путей
+        verbose: выводить информацию 
+
+    Returns:
+        Кортеж (список патчей изображения, списко патчей меток)
+    """
+    if verbose:
+        print("🔘[get_images_labels_path] start")
+
     base_path = images_dir.replace('/images','').replace("..", global_path)
     base_path = Path(base_path)
 
@@ -199,6 +213,9 @@ def get_images_labels_path(
     if not images_paths:
         raise ValueError(f"Not found images in {path_images}")
     
+    if verbose:
+        print("🟤[get_images_labels_path] path has been verified")
+
     valid_image_paths = []
     valid_label_paths = []
     missing_labels = []
@@ -214,8 +231,11 @@ def get_images_labels_path(
         else:
             missing_labels.append(img_name)
 
-    if missing_labels:
-        print(f"Warning: {len(missing_labels)} изображения без labels файлов")
-        print(f"Примеры: {missing_labels}")
+    if verbose:
+        print(f"🟢[get_images_labels_path] finish")
+        print(f"   - count images:{len(valid_image_paths)}")
+        print(f"   - count labels:{len(valid_image_paths)}")
+        if missing_labels:
+            print(f"   🔴 missing labels:{len(missing_labels)}")
 
-    return images_paths, labels_paths
+    return valid_image_paths, valid_label_paths
