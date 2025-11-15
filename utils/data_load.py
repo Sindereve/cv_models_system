@@ -1,11 +1,13 @@
+import os
+from pathlib import Path
+
 import torch
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, Dataset
 from tqdm import tqdm
-import os
-from typing import List, Tuple
+from PIL import Image
+from typing import List, Tuple, Any
 import glob
-from pathlib import Path
 
 def load_dataloader(
         data_dir: str,
@@ -239,3 +241,74 @@ def get_images_labels_path(
             print(f"   🔴 missing labels:{len(missing_labels)}")
 
     return valid_image_paths, valid_label_paths
+
+
+class DetectionDataset(Dataset):
+    """Датасет для детекции объектов"""
+    
+    def __init__(
+        self, 
+        images_dir: str,
+        global_path: str,
+        img_size: Tuple[int, int] = (640, 640),
+        transform: Any = None,
+        verbose: bool = False
+    ):
+        self.img_size = img_size
+        self.transform = transform
+        
+        self.image_paths, self.label_paths = get_images_labels_path(
+            images_dir, global_path, verbose
+        )
+        
+    def __len__(self):
+        return len(self.image_paths)
+    
+    def load_image(self, idx):
+        """
+        Загрузка и препроцессинг изображения
+        """
+        img_path = self.image_paths[idx]
+
+        image = Image.open(img_path).convert('RGB')
+        orig_w, orig_h = image.size
+
+        if not self.transform:
+            self.transform = transforms.Compose([
+                transforms.Resize(self.img_size),
+                transforms.ToTensor()
+            ])
+
+        image = self.transform(image)
+        return image, (orig_h, orig_w)
+    
+    def load_labels(self, idx, orig_size):
+        """
+        Загрузка и преобразование меток
+        """
+        label_path = self.label_paths[idx]
+        orig_w, orig_h = orig_size
+        
+        labels = []
+        with open(label_path, 'r') as f:
+            for line in f.readlines():
+                if line.strip():
+                    class_id, x_center, y_center, width, height = map(float, line.split())
+                    
+                    # масштабирование координат к новому размеру
+                    x_center = x_center * self.img_size[0] / orig_w
+                    y_center = y_center * self.img_size[1] / orig_h
+                    width = width * self.img_size[0] / orig_w
+                    height = height * self.img_size[1] / orig_h
+                    
+                    labels.append([class_id, x_center, y_center, width, height])
+        
+        if labels:
+            return torch.tensor(labels, dtype=torch.float32)
+        else:
+            return torch.zeros((0, 5), dtype=torch.float32)
+    
+    def __getitem__(self, idx):
+        image, orig_size = self.load_image(idx)
+        labels = self.load_labels(idx, orig_size)
+        return image, labels
