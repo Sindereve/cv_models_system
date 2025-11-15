@@ -2,6 +2,9 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
+import os
+from typing import List, Tuple
+import glob
 
 def load_dataloader(
         data_dir: str,
@@ -13,7 +16,7 @@ def load_dataloader(
         is_calculate_normalize_dataset: bool = True
     ) -> tuple[DataLoader, DataLoader, list[str]]:
     """
-    Созданиём Dataloader для тренировки
+    Созданиём Dataloader
 
     Args:
         data_dir: путь к папке с данными
@@ -167,3 +170,57 @@ def denormalize_image(
         std=[1/s for s in std]
     )
     return denorm(tensor)
+
+
+def get_images_labels_path(
+        images_dir: str, 
+        global_path: str
+    ) -> Tuple[List[str], List[str]]:
+    
+    path = images_dir.replace('/images','').replace("..", global_path)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Dir not found: {path}")
+    
+    path_images = path+'/images'
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Dir for images not found: {path_images}")
+
+    path_labels = path+'/labels'
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Dir for labels not found: {path_labels}")
+    
+    image_ext = ['.png', '.jpg', 'jpeg']
+    images_paths = []
+    labels_paths = []
+    
+    for ext in image_ext:
+        pattern = os.path.join(path_images, f'*{ext}')
+        images_paths.extend(glob.glob(pattern))
+    
+    if not images_paths:
+        raise ValueError(f"Not found images in {path_images}")
+    
+    valid_image_paths = []
+    valid_label_paths = []
+    missing_labels = []
+
+    for img_path in images_paths:
+        img_name = os.path.splitext(os.path.basename(img_path))[0]
+        labels_paths = os.path.join(path_labels, f"{img_name}.txt")
+
+        if os.path.exists(labels_paths):
+            valid_image_paths.append(img_path)
+            valid_label_paths.append(labels_paths)
+        else:
+            missing_labels.append(img_name)
+
+    if missing_labels:
+        print(f"Warning: {len(missing_labels)} изображения без labels файлов")
+        if len(missing_labels) > 5:
+            print(missing_labels[:5])
+        else:
+            print(missing_labels)
+
+    print(f"Валидных пар: {len(valid_image_paths)}")
+
+    return images_paths, labels_paths
