@@ -1,5 +1,5 @@
 import os
-from PIL import Image, ImageFile, UnidentifiedImageError
+from PIL import Image, ImageFile
 from pathlib import Path
 from tqdm import tqdm
 import warnings
