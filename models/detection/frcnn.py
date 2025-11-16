@@ -69,7 +69,10 @@ class FasterRCNN(nn.Module):
             raise ValueError(f"Unknown model name: {model_name}. Available: {list(model_mapping.keys())}")
 
         model_fn = model_mapping[model_name]
-        model: FasterRCNN_torchvision = model_fn(weights="DEFAULT" if weights else None, num_classes=num_classes)
+        model: FasterRCNN_torchvision = model_fn(
+            weights_backbone="DEFAULT" if weights else None, 
+            num_classes=num_classes
+        )
         
         # Заморозка весов
         if weights:
