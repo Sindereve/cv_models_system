@@ -52,43 +52,69 @@ class DetectionDataset(Dataset):
         Загрузка и препроцессинг изображения
         """
         img_path = self.image_paths[idx]
-
         image = Image.open(img_path).convert('RGB')
         orig_w, orig_h = image.size
-
         image = self.transform(image)
         return image, (orig_h, orig_w)
     
+    def _yolo_to_xyxy(self, yolo_bbox, orig_size):
+        """
+        Конвертирует YOLO формат (x_center, y_center, width, height) 
+        в формат xyxy (x_min, y_min, x_max, y_max)
+        """
+        orig_h, orig_w = orig_size
+        class_id, x_center, y_center, width, height = yolo_bbox
+        
+        # Масштабирование к исходному размеру
+        x_center = x_center * orig_w
+        y_center = y_center * orig_h
+        width = width * orig_w
+        height = height * orig_h
+        
+        # Конвертация в xyxy
+        x_min = x_center - width / 2
+        y_min = y_center - height / 2
+        x_max = x_center + width / 2
+        y_max = y_center + height / 2
+        
+        return [x_min, y_min, x_max, y_max]
+    
     def _load_labels(self, idx, orig_size):
         """
-        Загрузка и преобразование меток
+        Загрузка и преобразование меток в формат для torchvision
         """
         label_path = self.label_paths[idx]
-        orig_h, orig_w = orig_size
         
+        boxes = []
         labels = []
+        
         with open(label_path, 'r') as f:
             for line in f.readlines():
                 if line.strip():
-                    class_id, x_center, y_center, width, height = map(float, line.split())
+                    yolo_bbox = list(map(float, line.split()))
                     
-                    # масштабирование координат к новому размеру
-                    x_center = x_center * self.img_width / orig_w
-                    y_center = y_center * self.img_height / orig_h
-                    width = width * self.img_width / orig_w
-                    height = height * self.img_height / orig_h
+                    # Конвертируем YOLO → XYXY
+                    xyxy_bbox = self._yolo_to_xyxy(yolo_bbox, orig_size)
+                    class_id = int(yolo_bbox[0])
                     
-                    labels.append([class_id, x_center, y_center, width, height])
+                    boxes.append(xyxy_bbox)
+                    labels.append(class_id)
         
-        if labels:
-            return torch.tensor(labels, dtype=torch.float32)
+        if boxes:
+            return {
+                'boxes': torch.tensor(boxes, dtype=torch.float32),
+                'labels': torch.tensor(labels, dtype=torch.int64)
+            }
         else:
-            return torch.zeros((0, 5), dtype=torch.float32)
+            return {
+                'boxes': torch.zeros((0, 4), dtype=torch.float32),
+                'labels': torch.zeros(0, dtype=torch.int64)
+            }
     
     def __getitem__(self, idx):
         image, orig_size = self._load_image(idx)
-        labels = self._load_labels(idx, orig_size)
-        return image, labels
+        target = self._load_labels(idx, orig_size)
+        return image, target
     
 
 
