@@ -1,8 +1,9 @@
 import os
 import glob
 from pathlib import Path
-from typing import Tuple, Any, List
+from typing import Tuple, Any, List, Dict, Union
 from PIL import Image
+import torch
 
 import torch
 from torchvision import transforms
@@ -10,7 +11,7 @@ from torch.utils.data import Dataset
 
 class DetectionDataset(Dataset):
     """
-    Датасет с данными для решения задачи детекции
+    Датасет с данными задачи детекции
     """
     
     def __init__(
@@ -27,11 +28,11 @@ class DetectionDataset(Dataset):
         Params:
             images_dir: путь к папке с изображениями 
             global_path: путь к папке, где хранится data.yaml 
-            img_size: размер изображения (высота, ширина)
+            img_size: размер изображения (ширина, высота)
             transform: трансформер изменения изображения. Если None, то только изменяет размер изображения
             verbose: логировать процесс загрузки данных. Если False, то не логирует в консоль
         """
-        self.img_height, self.img_width = img_size
+        self.img_width, self.img_height = img_size
         
         self.image_paths, self.label_paths = get_images_labels_path(
             images_dir, global_path, verbose
@@ -47,41 +48,82 @@ class DetectionDataset(Dataset):
     def __len__(self):
         return len(self.image_paths)
     
-    def _load_image(self, idx):
+    def _load_image(self, idx: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
         """
-        Загрузка и препроцессинг изображения
+        Загрузка изображения, трансформация и возвращение тензора изображения вместе с оригинальным размером
+        (изображение конвертируется в RGB)
+        
+        Args:
+            idx: номер изображения
+
+        Returns:
+            Tuple[torch.Tensor, Tuple[int, int]]:
+                * тензор изображения (C, H, W)
+                * оригинальный размер изображения (ширина, высота)
         """
         img_path = self.image_paths[idx]
         image = Image.open(img_path).convert('RGB')
-        orig_w, orig_h = image.size
+        image_orig_size = image.size
+
         image = self.transform(image)
-        return image, (orig_h, orig_w)
+        return image, image_orig_size
     
-    def _yolo_to_xyxy(self, yolo_bbox, orig_size):
+    def _yolo_to_xyxy(
+            self, 
+            yolo_box: Tuple[int, float, float, float, float], 
+            orig_size: Tuple[int, int]
+        ) -> Tuple[int, List[int]]:
         """
-        Конвертирует YOLO формат (x_center, y_center, width, height) 
-        в формат xyxy (x_min, y_min, x_max, y_max)
+        Конвертация yolo(нормализированной) разметки в xyxy(в пиксельную)
+
+        Args:
+            yolo_box: нормализованные параметры бокса в формате yolo
+            orig_size: размер оригинального изображения (ширина, высота)
+        Returns:
+            Tuple[int, List[int]]:
+                * номер класса
+                * квадрат в котором находится обьект[x_min, y_min, x_max, y_max]
         """
-        orig_h, orig_w = orig_size
-        class_id, x_center, y_center, width, height = yolo_bbox
+        orig_w, orig_h = orig_size
+        class_id, x_center, y_center, width, height = yolo_box
         
-        # Масштабирование к исходному размеру
-        x_center = x_center * orig_w
-        y_center = y_center * orig_h
-        width = width * orig_w
-        height = height * orig_h
+        x_center *= orig_w
+        y_center *= orig_h
+        width *= orig_w
+        height *= orig_h
         
-        # Конвертация в xyxy
         x_min = x_center - width / 2
         y_min = y_center - height / 2
         x_max = x_center + width / 2
         y_max = y_center + height / 2
         
-        return [x_min, y_min, x_max, y_max]
+        # масштабирование под новый размер
+        scale_x = self.img_width / orig_w
+        scale_y = self.img_height / orig_h
+
+        x_min *= scale_x
+        x_max *= scale_x
+        y_min *= scale_y
+        y_max *= scale_y
+
+        return int(class_id), [x_min, y_min, x_max, y_max]
     
-    def _load_labels(self, idx, orig_size):
+    def _load_labels(
+            self, 
+            idx: int, 
+            orig_size: Tuple[int, int]
+        ) -> Dict[str, Union[torch.Tensor, torch.Tensor]]:
         """
-        Загрузка и преобразование меток в формат для torchvision
+        Загрузка и преобразование меток в формат совместимый с torchvision
+
+        Args:
+            idx: номер изображения
+            orig_size: размер оригинального изображения (ширина, высота)
+
+        Returns:
+            Dict['boxis': torch.Tensor, 'labels': torch.Tensor]:
+                * boxis: тензоры квадратов в которых находятся обьекты
+                * labels: id классов обьектов
         """
         label_path = self.label_paths[idx]
         
@@ -94,8 +136,7 @@ class DetectionDataset(Dataset):
                     yolo_bbox = list(map(float, line.split()))
                     
                     # Конвертируем YOLO → XYXY
-                    xyxy_bbox = self._yolo_to_xyxy(yolo_bbox, orig_size)
-                    class_id = int(yolo_bbox[0])
+                    class_id, xyxy_bbox = self._yolo_to_xyxy(yolo_bbox, orig_size)
                     
                     boxes.append(xyxy_bbox)
                     labels.append(class_id)
@@ -111,12 +152,11 @@ class DetectionDataset(Dataset):
                 'labels': torch.zeros(0, dtype=torch.int64)
             }
     
-    def __getitem__(self, idx):
-        image, orig_size = self._load_image(idx)
-        target = self._load_labels(idx, orig_size)
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Dict[]]:
+        image, origin_size_img  = self._load_image(idx)
+        target = self._load_labels(idx, origin_size_img)
         return image, target
     
-
 
 def get_images_labels_path(
         images_dir: str, 
@@ -126,12 +166,14 @@ def get_images_labels_path(
     """
     Получаем пары изображение-метка для задачи детекции
 
-    Args: 
+    Params: 
         images_dir: путь к директории с изображениями
         global_path: базовый путь для решения относительных путей
         verbose: выводить информацию 
     Returns:
-        Кортеж (список патчей изображения, списко патчей меток)
+        Кортеж из 2 списков:
+            - список путей к изображению
+            - список путей к соотвествующим веткам
     """
     if verbose:
         print("🔘[get_images_labels_path] start")
@@ -144,18 +186,18 @@ def get_images_labels_path(
     
     if not path_images.exists():
         raise FileNotFoundError(f"Dir for images not found: {path_images}")
-    if not path_labels.exists:
+    if not path_labels.exists():
         raise FileNotFoundError(f"Dir for labels not found: {path_labels}")
     
-    image_ext = ['.png', '.jpg', 'jpeg']
+    image_exts = ['*.png', '*.jpg', '*.jpeg']
     images_paths = []
     
-    for ext in image_ext:
-        pattern = str(path_images / f'*{ext}')
-        images_paths.extend(glob.glob(pattern))
-    
+    for ext in image_exts:
+        images_paths.extend(path_images.glob(ext))
+    images_paths = sorted([str(p) for p in images_paths])
+
     if not images_paths:
-        raise ValueError(f"Not found images in {path_images}")
+        raise ValueError(f"Not images found in {path_images}")
     
     if verbose:
         print("🟤[get_images_labels_path] path has been verified")
