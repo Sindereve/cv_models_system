@@ -152,7 +152,7 @@ class DetectionDataset(Dataset):
                 'labels': torch.zeros(0, dtype=torch.int64)
             }
     
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Dict[]]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Dict]:
         image, origin_size_img  = self._load_image(idx)
         target = self._load_labels(idx, origin_size_img)
         return image, target
