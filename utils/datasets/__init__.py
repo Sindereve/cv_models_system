@@ -148,7 +148,7 @@ def load_dataloader_detection(
     train_dataset = DetectionDataset(
         images_dir=train_path,
         global_path=path_data_dir,
-        img_size=(img_h_size, img_w_size)
+        img_size=(img_h_size, img_w_size),
         verbose=verbose
     )
 
