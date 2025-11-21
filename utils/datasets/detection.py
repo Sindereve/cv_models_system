@@ -217,11 +217,36 @@ def get_images_labels_path(
         else:
             missing_labels.append(img_name)
 
+    valid_image_paths, valid_label_paths = search_bad_syntaxis_in_label(valid_image_paths, valid_label_paths)
+
     if verbose:
         print(f"🟢[get_images_labels_path] finish")
         print(f"   - count images:{len(valid_image_paths)}")
-        print(f"   - count labels:{len(valid_image_paths)}")
+        print(f"   - count labels:{len(valid_label_paths)}")
         if missing_labels:
             print(f"   🔴 missing labels:{len(missing_labels)}")
 
     return valid_image_paths, valid_label_paths
+
+def search_bad_syntaxis_in_label(
+        valid_images_paths: List[str], 
+        valid_label_paths: List[str]
+    ) -> Tuple[list, list]:
+
+    count_bad_file = 0
+
+    for valid_label_path in valid_label_paths:
+        with open(valid_label_path, 'r') as f:
+            
+            line_count = 0
+
+            for line in f.readlines():
+                line_count+=1
+                if line.strip():
+                    yolo_bbox = list(map(float, line.split()))
+                    if len(yolo_bbox) != 5:
+                        count_bad_file+=1
+                        print(f'WARNING!!{valid_label_path} bad structure in {line_count}')
+    
+    return valid_images_paths, valid_label_paths
+                    

@@ -133,6 +133,7 @@ def load_dataloader_detection(
         total_img: int = 0,
         batch_size: int = 32,
         train_ration: float = 0.8,
+        verbose: bool = False
     ) -> Tuple[DataLoader, DataLoader, List[str]]:
     
     print("⚪[load_dataloader_detection] start create dataloaders")
@@ -148,12 +149,14 @@ def load_dataloader_detection(
         images_dir=train_path,
         global_path=path_data_dir,
         img_size=(img_h_size, img_w_size)
+        verbose=verbose
     )
 
     val_dataset = DetectionDataset(
         images_dir=val_path,
         global_path=path_data_dir,
-        img_size=(img_h_size, img_w_size)
+        img_size=(img_h_size, img_w_size),
+        verbose=verbose
     )
 
     # Ограничиваем количество изображений
