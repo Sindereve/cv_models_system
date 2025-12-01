@@ -10,7 +10,7 @@ from torch.optim import Optimizer, lr_scheduler
 from torch.utils.data import DataLoader
 
 import time
-from typing import Optional
+from typing import Optional, Dict
 
 import os
 # os.environ['MLFLOW_SUPPRESS_RUN_LOGS'] = 'true'
@@ -29,11 +29,13 @@ class Trainer:
             optimizer: Optional[Optimizer] = None,
             scheduler: Optional[lr_scheduler._LRScheduler] = None,
             device: Optional[torch.device] = None,
-            # next arg mlflow module
+            # mlflow tracking
             log_mlflow: bool = True,
+            mlflow_uri: str = 'http://127.0.0.1:5000',
             log_artifacts: bool = True,
             experiment_name: str = "Experiment_name",
             run_name : Optional[str] = None,
+            mlflow_tags: Optional[Dict[str, str]] = None,
         ):
         """
         Тренер для обучения, валидации и тестирования нейронных сетей.
@@ -56,10 +58,12 @@ class Trainer:
             device: Устройство вычислений GPU\\CPU
 
             log_mlflow: Флаг логирования в MLflow
+            mlflow_uri: URI MLflow tracking server (локальный или удаленный)
             log_artifacts: Флаг логирование артефактов
             experiment_name: Имя эксперимента в MLflow(По умолчанию: "Experiment_name")
             run_name: Уникальное имя запуска в MLflow(По умолчанию имя задаётся вида 
                 "{имя_модели}_{кол_эпох}_{скорость_схождения}_{Время}". Пример: "VGG_11_ep20_lr0.001_time(11:12_19:53:16)")
+            mlflow_tags: Дополнительные теги для запуска
         """
 
         # logger load
@@ -80,9 +84,11 @@ class Trainer:
 
         # mlflow
         self.log_mlflow = log_mlflow
+        self.mlflow_uri = mlflow_uri
         self.log_artifacts = log_artifacts
         self.experiment_name = experiment_name
         self.run_name = run_name
+        self.mlflow_tags = mlflow_tags
 
         self._validate_input()
         self._info_data()
@@ -224,6 +230,9 @@ class Trainer:
         else:
             self.logger.debug(f"|├🟢 scheduler: OK")
 
+        # mlflow test connect
+        self._mlflow_test_connect()
+
         self.logger.debug("|└🏁 finish validating params")
 
     def _setup_device(self, device: Optional[torch.device] = None):
@@ -249,7 +258,24 @@ class Trainer:
 
         self.logger.info(f"Training on: {self.device}")
         self.logger.debug(f"|└🟢Training on: {self.device}")
+
+    def _mlflow_test_connect(self):
+        """
+        Тестовое подключение к серверу mlflow
+        """
+        if not self.log_mlflow:
+            self.logger.debug("|🟢 MLflow tracking: OFF")
+            return
         
+        try:
+            self.logger.debug("||🔘 Test connection for MLflow. ")
+            mlflow.set_tracking_uri(self.mlflow_uri)
+
+            _ = mlflow.search_experiments()
+            self.logger.debug(f"||└🟢 Connected to MLflow at {self.mlflow_uri}")
+        except Exception as e:
+            self.logger.error(f"||└🔴MLflow server at {self.mlflow_uri} not available. Using local tracking.")
+            mlflow.set_tracking_uri(None)
 
     def _setup_mlflow(
             self,
@@ -257,13 +283,15 @@ class Trainer:
             lr: int
         ):
         """
-        Настройка MLFlow с предварительной проверкой сервера
+        Настройка MLflow с предварительной проверкой сервера
         """
         if not self.log_mlflow:
-            print(" ➖ log in Mlflow: OFF")
+            self.logger.debug("Log in MLflow: OFF")
             return
 
         try:
+            self.logger.debug("Log in MLflow: ON")
+            
             # Настройка MLflow
             mlflow.set_tracking_uri('http://127.0.0.1:5000')
             mlflow.set_experiment(self.experiment_name)
@@ -330,7 +358,6 @@ class Trainer:
         except Exception as e:
             print("🔴[MLFlow] Error set params model:", e)
             raise
-
 
     def _log_epoch_metric(
             self, 
