@@ -131,7 +131,7 @@ class DetectionDataset(Dataset):
         labels = []
         
         with open(label_path, 'r') as f:
-            for line in f.readlines():
+            for line in f:
                 if line.strip():
                     yolo_bbox = list(map(float, line.split()))
                     
@@ -217,12 +217,14 @@ def get_images_labels_path(
         else:
             missing_labels.append(img_name)
 
-    valid_image_paths, valid_label_paths = search_bad_syntaxis_in_label(valid_image_paths, valid_label_paths)
+    valid_image_paths, valid_label_paths = search_bad_syntaxis_in_label(valid_image_paths, 
+                                                                        valid_label_paths, 
+                                                                        verbose=verbose)
 
     if verbose:
         print(f"🟢[get_images_labels_path] finish")
-        print(f"   - count images:{len(valid_image_paths)}")
-        print(f"   - count labels:{len(valid_label_paths)}")
+        print(f"   ➖ count images:{len(valid_image_paths)}")
+        print(f"   ➖ count labels:{len(valid_label_paths)}")
         if missing_labels:
             print(f"   🔴 missing labels:{len(missing_labels)}")
 
@@ -230,23 +232,37 @@ def get_images_labels_path(
 
 def search_bad_syntaxis_in_label(
         valid_images_paths: List[str], 
-        valid_label_paths: List[str]
+        valid_label_paths: List[str],
+        verbose: bool = False
     ) -> Tuple[list, list]:
 
-    count_bad_file = 0
+    bad_patchs_labels = []
+    indxs_bad_patch_label = []
 
-    for valid_label_path in valid_label_paths:
+    for indx_label, valid_label_path in enumerate(valid_label_paths):
+        
+        line_count = 0
+        is_bad_file = False
+
         with open(valid_label_path, 'r') as f:
-            
-            line_count = 0
-
-            for line in f.readlines():
+            for line in f:
                 line_count+=1
                 if line.strip():
-                    yolo_bbox = list(map(float, line.split()))
+                    yolo_bbox = line.split()
                     if len(yolo_bbox) != 5:
-                        count_bad_file+=1
-                        print(f'WARNING!!{valid_label_path} bad structure in {line_count}')
+
+                        if not is_bad_file:
+                            bad_patchs_labels.append(valid_label_path)
+                            indxs_bad_patch_label.append(indx_label)
+                            is_bad_file = True
+
+    for indx_bad in indxs_bad_patch_label[::-1]:
+        valid_images_paths.pop(indx_bad)
+        valid_label_paths.pop(indx_bad)
     
+    if verbose:
+        print("🟡[search_bad_syntaxis_in_label] Finish")
+        print(f"   ➖ count bad labels:{len(bad_patchs_labels)}")
+
     return valid_images_paths, valid_label_paths
                     

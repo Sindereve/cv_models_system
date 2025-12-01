@@ -1,4 +1,6 @@
 import mlflow
+import logging
+import sys
 from mlflow.models.signature import infer_signature
 from tqdm import tqdm
 import torch
@@ -11,14 +13,18 @@ import time
 from typing import Optional
 
 import os
-os.environ['MLFLOW_SUPPRESS_RUN_LOGS'] = 'true'
+# os.environ['MLFLOW_SUPPRESS_RUN_LOGS'] = 'true'
 
-class BaseTrainer:
+class Trainer:
     def __init__(
             self, 
             model: nn.Module,
+            # data
             train_loader: DataLoader,
             val_loader: DataLoader,
+            test_loader: DataLoader = None,
+            # settings for train model
+            logger_lvl: str = 'debug',
             loss_fn: Optional[nn.Module] = None,
             optimizer: Optional[Optimizer] = None,
             scheduler: Optional[lr_scheduler._LRScheduler] = None,
@@ -30,85 +36,219 @@ class BaseTrainer:
             run_name : Optional[str] = None,
         ):
         """
-        Инициализация тренера модели
+        Тренер для обучения, валидации и тестирования нейронных сетей.
         
         Args:
             model: Нейронная сеть для обучения
+            
             train_loader: Данные для обучения
             val_loader: Данные для валидации
+            test_loader: Данные для тестирования
+
+            logger_lvl: Уровень логирования, один из 3 варинтов: 
+                * 'info' - выводится информация об обучении модели
+                * 'debug' - выводится вся информация о работе тренера.
+                * 'warning' - выводятся только ошибки и предупреждения
+                * 'error' - выводятся только ошибки
             loss_fn: Функция потерь
             optimizer: Оптимизатор
-            scheduler: Планировщик learning rate (optional)
-            device: Устройство вычислений GPU\CPU
+            scheduler: Планировщик learning rate
+            device: Устройство вычислений GPU\\CPU
+
             log_mlflow: Флаг логирования в MLflow
-            log_artifacts: Логирование артефактов
-            experiment_name: Имя эксперимента в MLflow
-            run_name: Уникальное имя запуска в MLflow
+            log_artifacts: Флаг логирование артефактов
+            experiment_name: Имя эксперимента в MLflow(По умолчанию: "Experiment_name")
+            run_name: Уникальное имя запуска в MLflow(По умолчанию имя задаётся вида 
+                "{имя_модели}_{кол_эпох}_{скорость_схождения}_{Время}". Пример: "VGG_11_ep20_lr0.001_time(11:12_19:53:16)")
         """
-        self._validate_input(model, train_loader, val_loader)
-        print("⚪ Start init")
-        
+
+        # logger load
+        self.logger = self._setup_logger(logger_lvl)
+        self.logger.debug("⚪ Start init")
+
+        # model and setting learning
         self.model = model
+        self.loss_fn = loss_fn 
+        self.optimizer = optimizer 
+        self.scheduler = scheduler
+        self.device = device
+
+        # data
         self.train_loader = train_loader
-        print(" ➖ Train load sample:", len(self.train_loader.dataset))
         self.val_loader = val_loader
-        print(" ➖ Val load sample:  ", len(self.val_loader.dataset))
+        self.test_loader = test_loader
 
-        # device
-        self._setup_device(device)
-        self.model.to(self.device)
-
-        # loss and optimizer
-        self.loss_fn = loss_fn or nn.CrossEntropyLoss()
-        self.optimizer = optimizer or optim.Adam(self.model.parameters(), lr=0.001)
-        self.scheduler = scheduler or lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=50)
-
-        # metrics
-        self.history = {
-            'train_loss': [], 'train_accuracy': [],
-            'val_loss': [], 'val_accuracy': [],
-            'learning_rate': []
-        }
-        self.best_weights = None
-        
         # mlflow
         self.log_mlflow = log_mlflow
         self.log_artifacts = log_artifacts
         self.experiment_name = experiment_name
         self.run_name = run_name
 
-        print("🟢 Finish init")
+        self._validate_input()
+        self._info_data()
 
-    def _validate_input(
+        # device
+        self._setup_device(device)
+        self.model.to(self.device)
+
+        # metrics
+        self.history = {
+            'train_loss': [], 
+            'train_accuracy': [],
+            'val_loss': [], 
+            'val_accuracy': [],
+            'learning_rate': []
+        }
+
+        self.logger.debug("🏁 Finish init")
+
+    def _setup_logger(
             self, 
-            model: nn.Module, 
-            train_loader: DataLoader, 
-            val_loader: DataLoader
+            logger_lvl: str
         ):
+        """
+        Настройка логера
+        
+        Args:
+            logger_lvl: уровень логирования ('debug', 'info', 'warning', 'error')
+        """
+        logger = logging.getLogger(f"Trainer")
+        
+        logger.handlers.clear()
+
+        if logger_lvl == 'debug':
+            logger.setLevel(logging.DEBUG)
+        elif logger_lvl == 'info':
+            logger.setLevel(logging.INFO)
+        elif logger_lvl == 'warning':
+            logger.setLevel(logging.WARNING)
+        elif logger_lvl == 'error':
+            logger.setLevel(logging.ERROR)
+        else:
+            logger.setLevel(logging.INFO)
+        
+        formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%H:%M:%S"
+        )
+        
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logger.level)
+        console_handler.setFormatter(formatter)
+        
+        logger.addHandler(console_handler)
+        
+        logging.addLevelName(logging.INFO,    "💙 [ INFO  ]")
+        logging.addLevelName(logging.WARNING, "💛 [WARNING]")
+        logging.addLevelName(logging.ERROR,   "💔 [ ERROR ]")
+        logging.addLevelName(logging.DEBUG,   "🔎 [ DEBUG ]")
+
+        logger.debug(f"Logger build.")
+        return logger
+
+    def _info_data(self):
+        self.logger.debug("|🔘 Print info data")
+    
+        batch, _ = next(iter(self.train_loader))
+        img_shape = batch[0].size()
+        self.logger.info(f" ➖ Image count color:   {img_shape[0]}")
+        self.logger.info(f" ➖ Image size:          {img_shape[1:]} (H×W)")
+
+        batch_size = len(batch)
+        train_size = len(self.train_loader.dataset)
+        val_size = len(self.val_loader.dataset)
+
+        self.logger.info(f" ➖ Batch size:          {batch_size}")
+        self.logger.info(f" ➖ Train data sample:   {train_size}")
+        self.logger.info(f" ➖ Validate data sample:{val_size}")
+        if self.test_loader is not None:
+            test_size = len(self.test_loader.dataset)
+            self.logger.info(f" ➖ Test data sample:   {test_size}")
+        else:
+            self.logger.info(" ➖ Test data sample:    Not used")
+            self.logger.warning(" Model don`t testing for test data! (test_loader is None value)")
+        self.logger.debug("|🏁 Finish print info for data")
+
+    def _validate_input(self):
         """
         Валидация входных данных
         """
-        if not isinstance(model, nn.Module):
-            raise TypeError("model must be nn.Module")
-        if not isinstance(train_loader, DataLoader):
-            raise TypeError("train_loader must be DataLoader")
-        if not isinstance(val_loader, DataLoader):
-            raise TypeError("val_loader must be DataLoader")
+        self.logger.debug("|🔘 Start input value validation")
+
+        cheks = [
+            (self.model, nn.Module, "model"),
+            (self.train_loader, DataLoader, "train_loader"),
+            (self.val_loader, DataLoader, "val_loader"),
+        ]
+
+        for obj, type, name in cheks:
+            if not isinstance(obj, type):
+                self.logger.error(f"|└🔴 {name} is not {type}. Type value is {type(obj)}")
+                raise TypeError(f"{name} must be {type}")
+            
+            if type == DataLoader:
+                try:
+                    next(iter(obj.dataset))
+                except StopIteration:
+                    self.logger.error(f"|└🔴 {name}({type}) is empty.")
+                    raise StopIteration(f"{name}({type}) is empty.")
+            
+            self.logger.debug(f"|├🟢 {name}: OK")
+
+        check_and_adjust = [
+            (self.test_loader, DataLoader, "test_loader", None),
+            (self.loss_fn, nn.Module, "loss_fn", nn.CrossEntropyLoss()),
+            (self.device, torch.device, "device", None),
+        ]
+
+        for obj, type, name, new_val in check_and_adjust :
+            if not isinstance(obj, type):
+                self.logger.warning(f"🟠 {name} is not {type}.")
+                setattr(self, name, new_val)
+                self.logger.debug(f"|├🟢 {name} change in default value. ({new_val})")
+            else:
+                self.logger.debug(f"|├🟢 {name}: OK")
+
+        # optimizer
+        if not isinstance(self.optimizer, Optimizer):
+            self.logger.warning(f"🟠 optimizer is not {Optimizer}. Change in default value({optim.Adam})")
+            self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+            self.logger.debug(f"|├🟢 optimizer change in default value. (learning_rate = 0.001, {optim.Adam})")
+        else:
+            self.logger.debug(f"|├🟢 optimizer: OK")
+
+        if not isinstance(self.scheduler, lr_scheduler._LRScheduler):
+            self.logger.warning(f"🟠 scheduler is not {lr_scheduler._LRScheduler}. Change in default value({lr_scheduler.CosineAnnealingLR})")
+            self.scheduler = lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=50)
+            self.logger.debug(f"|├🟢 scheduler change in default value. ({lr_scheduler.CosineAnnealingLR})")
+        else:
+            self.logger.debug(f"|├🟢 scheduler: OK")
+
+        self.logger.debug("|└🏁 finish validating params")
 
     def _setup_device(self, device: Optional[torch.device] = None):
         """
-        Настройка используемого памяти для обучения
+        Настройка используемого "аппарата" обучения
         """
+        self.logger.debug("|🔘 Start setting device")
+
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = device
         
-        if self.device.type == 'cuda' and not torch.cuda.is_available():
-            print("🟠 Внимание: ошибка использования 'CUDA', используется 'CPU'")
-            self.device = torch.device('cpu')
-        torch.cuda.empty_cache()
-        print(" ➖ Training on:", self.device)
+        if self.device.type == 'cuda':
+            if not torch.cuda.is_available():
+                self.logger.warning("🟠 error load 'CUDA'. Using 'CPU'")
+                self.device = torch.device('cpu')
+            else:
+                # clear cache in cuda
+                torch.cuda.empty_cache()
+                gpu_info = torch.cuda.get_device_name(self.device)
+                self.logger.debug(f"||🟡 GPU: {gpu_info}")
+
+        self.logger.info(f"Training on: {self.device}")
+        self.logger.debug(f"|└🟢Training on: {self.device}")
         
 
     def _setup_mlflow(
