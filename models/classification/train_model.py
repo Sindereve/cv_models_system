@@ -58,7 +58,7 @@ class Trainer:
             device: Устройство вычислений GPU\\CPU
 
             log_mlflow: Флаг логирования в MLflow
-            mlflow_uri: URI MLflow tracking server (локальный или удаленный)
+            mlflow_uri: URI MLflow tracking server (локальный или удаленный, !! HTTP !!)
             log_artifacts: Флаг логирование артефактов
             experiment_name: Имя эксперимента в MLflow(По умолчанию: "Experiment_name")
             run_name: Уникальное имя запуска в MLflow(По умолчанию имя задаётся вида 
@@ -153,7 +153,7 @@ class Trainer:
         return logger
 
     def _info_data(self):
-        self.logger.debug("|🔘 Print info data")
+        self.logger.debug("├🔘 Print info data")
     
         batch, _ = next(iter(self.train_loader))
         img_shape = batch[0].size()
@@ -179,7 +179,7 @@ class Trainer:
         """
         Валидация входных данных
         """
-        self.logger.debug("|🔘 Start input value validation")
+        self.logger.debug("├🔘 Start input value validation")
 
         cheks = [
             (self.model, nn.Module, "model"),
@@ -239,7 +239,7 @@ class Trainer:
         """
         Настройка используемого "аппарата" обучения
         """
-        self.logger.debug("|🔘 Start setting device")
+        self.logger.debug("├🔘 Start setting device")
 
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -268,7 +268,7 @@ class Trainer:
             return
         
         try:
-            self.logger.debug("||🔘 Test connection for MLflow. ")
+            self.logger.debug("|├🔘 Test connection for MLflow. ")
             mlflow.set_tracking_uri(self.mlflow_uri)
 
             _ = mlflow.search_experiments()
@@ -276,6 +276,16 @@ class Trainer:
         except Exception as e:
             self.logger.error(f"||└🔴MLflow server at {self.mlflow_uri} not available. Using local tracking.")
             mlflow.set_tracking_uri(None)
+
+    def _safe_end_mlflow_run(self):
+        """
+        Закрытие активного MLflow run, который не закрылся при ошибке
+        """
+        active_run = mlflow.active_run()
+        if active_run:
+            mlflow.end_run(status="KILLED")
+            self.logger.debug("├ Close old run mlflow")
+        
 
     def _setup_mlflow(
             self,
@@ -286,39 +296,33 @@ class Trainer:
         Настройка MLflow с предварительной проверкой сервера
         """
         if not self.log_mlflow:
-            self.logger.debug("Log in MLflow: OFF")
+            self.logger.debug("🟢 Tracking in MLflow: OFF")
             return
 
         try:
-            self.logger.debug("Log in MLflow: ON")
+            self.logger.debug("🔘 Start setting tracking in MLflow")
             
-            # Настройка MLflow
-            mlflow.set_tracking_uri('http://127.0.0.1:5000')
             mlflow.set_experiment(self.experiment_name)
+            self._safe_end_mlflow_run()
 
             if self.run_name is None:
                 time_str = time.strftime('%m:%d_%H:%M:%S')
                 self.run_name = f"{self.model.__class__.__name__}_ep{epoch}_lr{lr}_time({time_str})"
 
-            print(f"🔵[MLFlow] Starting run: {self.run_name}")
             try:
                 self.mlflow_run = mlflow.start_run(run_name=self.run_name)
             except Exception as e:
-                mlflow.end_run()
+                mlflow.end_run(
+                    status="FAILED"
+                )
                 self.mlflow_run = mlflow.start_run(run_name=self.run_name)
-                print(f"🔵[MLFlow] Stop old run_name started successfully: {self.mlflow_run.info.run_id}")
+                self.logger.warning(f"🟠 Stop old run_name started successfully: {self.mlflow_run.info.run_id}")
 
-            print(f"🔵[MLFlow] Tracking URI: {mlflow.get_tracking_uri()}")
-            print(f"🔵[MLFlow] Artifact URI: {mlflow.get_artifact_uri()}")
-            print(f"🟢[MLFlow] Run started successfully: {self.mlflow_run.info.run_id}")
-            
+            self.logger.debug(f"🏁 Finish setting MLflow")
         except Exception as e:
-            print(f"🔴[MLFlow] Setup failed: {e}")
+            self.logger.error(f"├🔴 MLflow setup failed: {e}")
+            self.logger.warning("No use tracking MLflow")
             self.log_mlflow = False
-            try:
-                mlflow.end_run()
-            except:
-                pass
 
     def _log_model_parameters(self):
         """
