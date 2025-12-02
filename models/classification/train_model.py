@@ -1,6 +1,7 @@
 import mlflow
 import logging
 import sys
+from contextlib import contextmanager
 from mlflow.models.signature import infer_signature
 from tqdm import tqdm
 import torch
@@ -173,7 +174,7 @@ class Trainer:
         else:
             self.logger.info(" ➖ Test data sample:    Not used")
             self.logger.warning(" Model don`t testing for test data! (test_loader is None value)")
-        self.logger.debug("|🏁 Finish print info for data")
+        self.logger.debug("|└🏁 Finish print info for data")
 
     def _validate_input(self):
         """
@@ -272,7 +273,7 @@ class Trainer:
             mlflow.set_tracking_uri(self.mlflow_uri)
 
             _ = mlflow.search_experiments()
-            self.logger.debug(f"||└🟢 Connected to MLflow at {self.mlflow_uri}")
+            self.logger.debug(f"||├🟢 Connected to MLflow at {self.mlflow_uri}")
         except Exception as e:
             self.logger.error(f"||└🔴MLflow server at {self.mlflow_uri} not available. Using local tracking.")
             mlflow.set_tracking_uri(None)
@@ -285,7 +286,52 @@ class Trainer:
         if active_run:
             mlflow.end_run(status="KILLED")
             self.logger.debug("├ Close old run mlflow")
+
+    @contextmanager
+    def mlflow_run_manager(self):
+        """
+        Контекстный менеджер для работы с MLflow runs.
+        """
+        if not self.log_mlflow:
+            yield
+            return
         
+        run = None
+        try:
+            run = mlflow.start_run(run_name=self.run_name) 
+            self.mlflow_run = run
+            
+
+            self.logger.debug("🔘 MLflow run finished successfully")
+            yield
+            
+            if run:
+                mlflow.end_run(status="FINISHED")
+                self.logger.debug("└🏁 MLflow run finished successfully")
+                
+        except Exception as e:
+            if run:
+                mlflow.end_run(status="FAILED")
+                self.logger.error(f"🔴 MLflow run failed: {e}")
+
+            raise
+        finally:
+            self._ensure_run_closed(run)
+
+    def _ensure_run_closed(self, run):
+        """Гарантированное закрытие run"""
+        try:
+            self.logger.debug("🔘 Start close run in mlflow")
+            active_run = mlflow.active_run()
+            if active_run:
+                if run and active_run.info.run_id == run.info.run_id:
+                    mlflow.end_run(status="KILLED")
+                elif not run:
+                    mlflow.end_run(status="KILLED")
+                self.logger.warning("🟠 Force-closed MLflow run")
+            self.logger.debug("└🏁 Finish close run in mlflow")
+        except:
+            pass
 
     def _setup_mlflow(
             self,
@@ -293,14 +339,14 @@ class Trainer:
             lr: int
         ):
         """
-        Настройка MLflow с предварительной проверкой сервера
+        Настройка MLflow
         """
         if not self.log_mlflow:
             self.logger.debug("🟢 Tracking in MLflow: OFF")
             return
 
         try:
-            self.logger.debug("🔘 Start setting tracking in MLflow")
+            self.logger.debug("|🔘 START MLflow setting")
             
             mlflow.set_experiment(self.experiment_name)
             self._safe_end_mlflow_run()
@@ -309,19 +355,12 @@ class Trainer:
                 time_str = time.strftime('%m:%d_%H:%M:%S')
                 self.run_name = f"{self.model.__class__.__name__}_ep{epoch}_lr{lr}_time({time_str})"
 
-            try:
-                self.mlflow_run = mlflow.start_run(run_name=self.run_name)
-            except Exception as e:
-                mlflow.end_run(
-                    status="FAILED"
-                )
-                self.mlflow_run = mlflow.start_run(run_name=self.run_name)
-                self.logger.warning(f"🟠 Stop old run_name started successfully: {self.mlflow_run.info.run_id}")
-
-            self.logger.debug(f"🏁 Finish setting MLflow")
+            self.logger.debug(f"|├🟢 run name {self.run_name}")
+            self.logger.debug(f"|├🟢 run name {self.run_name}")
+            self.logger.debug("|└🏁 FINISH MLflow setting")
         except Exception as e:
-            self.logger.error(f"├🔴 MLflow setup failed: {e}")
-            self.logger.warning("No use tracking MLflow")
+            self.logger.error(f"🔴 MLflow setup failed: {e}")
+            self.logger.warning("🟠 No use tracking MLflow")
             self.log_mlflow = False
 
     def _log_model_parameters(self):
@@ -386,7 +425,6 @@ class Trainer:
 
         except Exception as e:
             print("🔴[MLFlow] Error set params model:", e)
-
 
     def _log_model_checkpoint(self, epoch: int):
         """
@@ -474,7 +512,6 @@ class Trainer:
                 
         except Exception as e:
             print(f"🔴[MLFlow] Error logging artifacts: {e}")
-
 
     def _train_one_epoch(
             self,
@@ -600,31 +637,37 @@ class Trainer:
         Args:
             epoch: количество эпох для тренировки
         """
-        print("🔘[train] Start")
-        best_val_acc = 0.0
-
+        self.logger.info("🔘 Start train")
+        
         if self.log_mlflow:
             self._setup_mlflow(epochs, self.optimizer.param_groups[0]['lr'])
-            self._log_model_parameters()
-
-        for epoch in range(epochs):
-            print("="*50)
-            print(f"🔄 Epoch[🔹{epoch+1}/{epochs}🔹] start")
-            self._train_one_epoch()
-            self._validate_one()
+        
+        with self.mlflow_run_manager() as run:
             
-            self._log_epoch_metric(epoch+1)
+            if run:
+                self._log_model_parameters()
 
-            if best_val_acc < self.history['val_accuracy'][-1]:
-                best_val_acc = self.history['val_accuracy'][-1]
-                self._log_model_checkpoint(epoch + 1)
+            # надо изменить на что-то своё 
+            best_val_acc = 0.0
 
-            print(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
+            for epoch in range(epochs):
+                self.logger.info("="*20)
+                self.logger.info(f"🔄 Epoch[🔹{epoch+1}/{epochs}🔹] start")
+                self._train_one_epoch()
+                self._validate_one()
+                
+                self._log_epoch_metric(epoch+1)
 
-        # Логируем все артефакты
-        self._log_training_artifacts()
+                if best_val_acc < self.history['val_accuracy'][-1]:
+                    best_val_acc = self.history['val_accuracy'][-1]
+                    self._log_model_checkpoint(epoch + 1)
 
-        if self.log_mlflow:
-            mlflow.end_run()
+                self.logger.info(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
 
-        print("🟢[train] Completed!!!")
+            # Логируем все артефакты
+            self._log_training_artifacts()
+
+            if self.log_mlflow:
+                mlflow.end_run()
+
+            self.logger.info("🏁 Finish train")
