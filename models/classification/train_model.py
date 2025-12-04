@@ -24,6 +24,7 @@ class Trainer:
             train_loader: DataLoader,
             val_loader: DataLoader,
             test_loader: DataLoader = None,
+            classes: Optional[Dict] = None,
             # settings for train model
             logger_lvl: str = 'debug',
             loss_fn: Optional[nn.Module] = None,
@@ -47,6 +48,7 @@ class Trainer:
             train_loader: Данные для обучения
             val_loader: Данные для валидации
             test_loader: Данные для тестирования
+            classes: Классы в данных(словарь[значение: индекс класса])
 
             logger_lvl: Уровень логирования, один из 3 варинтов: 
                 * 'info' - выводится информация об обучении модели
@@ -79,6 +81,7 @@ class Trainer:
         self.device = device
 
         # data
+        self.classes = classes
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.test_loader = test_loader
@@ -294,8 +297,6 @@ class Trainer:
             run = mlflow.start_run(run_name=self.run_name) 
             self.mlflow_run = run
             
-
-            self.logger.debug("🔘 MLflow run finished successfully")
             yield
             
             if run:
@@ -355,7 +356,10 @@ class Trainer:
             self.logger.warning("🟠 No use tracking MLflow")
             self.log_mlflow = False
 
-    def _mlflow_log_model_parameters(self):
+    def _mlflow_log_parameters(
+            self,
+            epochs: int,
+        ):
         """
         Логирование параметров модели и обучения
         """
@@ -363,35 +367,64 @@ class Trainer:
             model_params = {
                 'model_type': self.model.__class__.__name__,
                 'device': self.device.type,
-                'total_parameters': sum([p.numel() for p in self.model.parameters()])
+                'model_total_parameters': sum([p.numel() for p in self.model.parameters()]),
+                'model_trainable_parameters': sum([p.numel() for p in self.model.parameters() if p.requires_grad]),
             }
 
-            optiizer_params = {
+            # Optim
+            optimizer_params = {
                 'optimizer': self.optimizer.__class__.__name__,
                 'learning_rate': self.optimizer.param_groups[0]['lr']
             }
-
             for key, value in self.optimizer.param_groups[0].items():
                 if key != 'params':
-                    optiizer_params[f'optimizer_{key}'] = value
+                    optimizer_params[f'optimizer_{key}'] = value
             
             data_params = {
-                'train_sample': len(self.train_loader.dataset),
-                'val_sample': len(self.val_loader.dataset),
+                'data_train_sample': self.train_loader_size,
+                'data_val_sample': self.val_loader_size,
+                'data_test_sample': self.test_loader_size if self.test_loader_size else "Unknown",
                 'batch_size': self.train_loader.batch_size,
-                'num_classes': getattr(self.train_loader, 'num_classes', 'unknown')
+                'classes_count': len(self.classes),
             }
+
+            training_params = {
+                'epochs': epochs,
+            }
+
+            if hasattr(self, 'sheduler') and self.scheduler:
+                scheduler_params = {
+                    'scheduler': self.scheduler.__class__.__name__,
+                }
+                if hasattr(self.scheduler, 'step_size'):
+                    scheduler_params['scheduler_step_size'] = self.scheduler.step_size
+                if hasattr(self.scheduler, 'gamma'):
+                    scheduler_params['scheduler_gamma'] = self.scheduler.gamma
+                if hasattr(self.scheduler, 'T_0'):  # CosineAnnealingWarmRestarts
+                    scheduler_params['scheduler_T_0'] = self.scheduler.T_0
+
+            if hasattr(self, 'loss_fn'):
+                loss_fn_params = {
+                    'loss_fn': self.loss_fn.__class__.__name__,
+                }
+                for attr in ['weight', 'size_average', 'reduce', 'reduction', 'ignore_index']:
+                    if hasattr(self.loss_fn, attr):
+                        value = getattr(self.loss_fn, attr)
+                        if torch.is_tensor(value):
+                            value = value.to_list()
+                        loss_fn_params[f'loss_fn_{attr}'] = str(value)
+                training_params.update(loss_fn_params)
             
             all_params = {
                 **model_params, 
                 **data_params,
-                **optiizer_params, 
-                
+                **optimizer_params,
+                **training_params
             }
             mlflow.log_params(all_params)
-            print('🔵[MLFlow] parameters model add in MLFlow')
+            self.logger.debug('|🟢Parameters model add in MLFlow')
         except Exception as e:
-            print("🔴[MLFlow] Error set params model:", e)
+            self.logger.error("Error set all params in mlflow:", e)
             raise
 
     def _log_epoch_metric(
@@ -639,7 +672,9 @@ class Trainer:
         
         with self.mlflow_run_manager():
             
-            self._mlflow_log_model_parameters()
+            self._mlflow_log_parameters(
+                epochs
+            )
 
             # надо изменить на что-то своё 
             # В планах поменять
