@@ -14,7 +14,7 @@ import time
 from typing import Optional, Dict
 
 import os
-# os.environ['MLFLOW_SUPPRESS_RUN_LOGS'] = 'true'
+os.environ['MLFLOW_SUPPRESS_RUN_LOGS'] = 'true'
 
 class Trainer:
     def __init__(
@@ -92,7 +92,7 @@ class Trainer:
         self.mlflow_tags = mlflow_tags
 
         self._validate_input()
-        self._info_data()
+        self.train_loader_size, self.val_loader_size, self.test_loader_size = self._get_size_datasets()
 
         # device
         self._setup_device(device)
@@ -153,8 +153,8 @@ class Trainer:
         logger.debug(f"Logger build.")
         return logger
 
-    def _info_data(self):
-        self.logger.debug("├🔘 Print info data")
+    def _get_size_datasets(self):
+        self.logger.debug("├🔘 Calculate size data")
     
         batch, _ = next(iter(self.train_loader))
         img_shape = batch[0].size()
@@ -172,9 +172,11 @@ class Trainer:
             test_size = len(self.test_loader.dataset)
             self.logger.info(f" ➖ Test data sample:   {test_size}")
         else:
+            test_size = None
             self.logger.info(" ➖ Test data sample:    Not used")
             self.logger.warning(" Model don`t testing for test data! (test_loader is None value)")
-        self.logger.debug("|└🏁 Finish print info for data")
+        self.logger.debug("|└🏁 Finish calculate info for data")
+        return train_size, val_size, test_size 
 
     def _validate_input(self):
         """
@@ -278,15 +280,6 @@ class Trainer:
             self.logger.error(f"||└🔴MLflow server at {self.mlflow_uri} not available. Using local tracking.")
             mlflow.set_tracking_uri(None)
 
-    def _safe_end_mlflow_run(self):
-        """
-        Закрытие активного MLflow run, который не закрылся при ошибке
-        """
-        active_run = mlflow.active_run()
-        if active_run:
-            mlflow.end_run(status="KILLED")
-            self.logger.debug("├ Close old run mlflow")
-
     @contextmanager
     def mlflow_run_manager(self):
         """
@@ -349,7 +342,6 @@ class Trainer:
             self.logger.debug("|🔘 START MLflow setting")
             
             mlflow.set_experiment(self.experiment_name)
-            self._safe_end_mlflow_run()
 
             if self.run_name is None:
                 time_str = time.strftime('%m:%d_%H:%M:%S')
@@ -363,7 +355,7 @@ class Trainer:
             self.logger.warning("🟠 No use tracking MLflow")
             self.log_mlflow = False
 
-    def _log_model_parameters(self):
+    def _mlflow_log_model_parameters(self):
         """
         Логирование параметров модели и обучения
         """
@@ -513,18 +505,17 @@ class Trainer:
         except Exception as e:
             print(f"🔴[MLFlow] Error logging artifacts: {e}")
 
-    def _train_one_epoch(
+    def _train_one(
             self,
         ):
         """
         Проход по тренировочным данным и тренировка на них
         """
-
+        self.logger.debug("🔘 Start train")
         self.model.train()
 
         runner_loss = 0.0
         correct_predictions = 0
-        total_sample = 0
 
         for data in self._tqdm_loader(self.train_loader, "Training"):
             inputs, labels = data
@@ -544,7 +535,6 @@ class Trainer:
 
             runner_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
-            total_sample += labels.size(0)
             correct_predictions += (predicted == labels).sum().item()
             
             # cuda opyat ushla vsya pamyat'
@@ -553,7 +543,7 @@ class Trainer:
         self.scheduler.step()
 
         epoch_loss = runner_loss / len(self.train_loader)
-        epoch_accuracy = correct_predictions / total_sample
+        epoch_accuracy = correct_predictions / self.train_loader_size
         lr = self.optimizer.param_groups[0]['lr']
 
         self.history['train_loss'].append(epoch_loss)
@@ -563,10 +553,11 @@ class Trainer:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        print(f"Epoch Result:")
-        print(f" ➖ Train Loss: {epoch_loss:.4f}")
-        print(f" ➖ Train Acc:  {epoch_accuracy:.4f}")
-        print(f" ➖ LR:         {lr:.6f}")
+        self.logger.info(f"Epoch Result:")
+        self.logger.info(f" ➖ Train Loss: {epoch_loss:.4f}")
+        self.logger.info(f" ➖ Train Acc:  {epoch_accuracy:.4f}")
+        self.logger.info(f" ➖ LR:         {lr:.6f}")
+        self.logger.debug("🔘 Start train one")
 
     def _tqdm_loader(
             self,
@@ -594,7 +585,6 @@ class Trainer:
 
         runner_loss = 0.0
         correct_predictions = 0
-        total_sample = 0
 
         with torch.no_grad():
             for data in self._tqdm_loader(self.val_loader, "Validating"):
@@ -608,14 +598,13 @@ class Trainer:
 
                 runner_loss += loss.item()
                 _, predicted = torch.max(outputs.data, 1)
-                total_sample += labels.size(0)
                 correct_predictions += (predicted == labels).sum().item()
                 
                 # cude opyat ushla vsya pamyat'
                 del inputs, outputs, labels, loss
 
         avg_loss = runner_loss / (len(self.val_loader))
-        accuracy = correct_predictions / total_sample
+        accuracy = correct_predictions / self.val_loader_size
 
         self.history["val_loss"].append(avg_loss)
         self.history["val_accuracy"].append(accuracy)
@@ -627,7 +616,7 @@ class Trainer:
         print(f" ➖ Val Loss: {avg_loss:.4f}")
         print(f" ➖ Val Acc:  {accuracy:.4f}")
 
-    def train(
+    def train_with_mlflow(
             self,
             epochs: int = 20,
         ) -> nn.Module:
@@ -638,22 +627,28 @@ class Trainer:
             epoch: количество эпох для тренировки
         """
         self.logger.info("🔘 Start train")
+        if not self.log_mlflow:
+            self.logger.error("MLFlow - OFF in params the class")
+            self.logger.error("TRAIN STOP")
+            return self.model
+
+        self._setup_mlflow(
+            epochs, 
+            self.optimizer.param_groups[0]['lr']
+        )
         
-        if self.log_mlflow:
-            self._setup_mlflow(epochs, self.optimizer.param_groups[0]['lr'])
-        
-        with self.mlflow_run_manager() as run:
+        with self.mlflow_run_manager():
             
-            if run:
-                self._log_model_parameters()
+            self._mlflow_log_model_parameters()
 
             # надо изменить на что-то своё 
+            # В планах поменять
             best_val_acc = 0.0
 
             for epoch in range(epochs):
                 self.logger.info("="*20)
                 self.logger.info(f"🔄 Epoch[🔹{epoch+1}/{epochs}🔹] start")
-                self._train_one_epoch()
+                self._train_one()
                 self._validate_one()
                 
                 self._log_epoch_metric(epoch+1)
