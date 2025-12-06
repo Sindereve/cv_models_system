@@ -9,6 +9,11 @@ from torch import nn
 from torch import optim
 from torch.optim import Optimizer, lr_scheduler
 from torch.utils.data import DataLoader
+from torchmetrics import MetricCollection
+from torchmetrics.classification import (
+    Accuracy, Recall, Precision, F1Score
+)
+from torchmetrics import MeanMetric
 
 import time
 from typing import Optional, Dict
@@ -100,6 +105,16 @@ class Trainer:
         # device
         self._setup_device(device)
         self.model.to(self.device)
+
+        self.train_metrics = self.create_classification_metrics(
+            preset = 'minimal',
+            prefix = 'train_',
+        )
+
+        self.val_metrics = self.create_classification_metrics(
+            preset = 'full',
+            prefix = 'val_',
+        )
 
         # metrics
         self.history = {
@@ -427,9 +442,128 @@ class Trainer:
             self.logger.error("Error set all params in mlflow:", e)
             raise
 
+    def create_classification_metrics(
+            self,
+            preset: str = 'full',
+            prefix: str = '',
+        ) -> MetricCollection:
+        """
+        Создание коллекции метрик для задачи классификации
+        
+        Args:
+            preset: 'minimal', 'standard', 'full'
+            prefix: префикс для имени метрик
+        Returns:
+            MetricCollection с настроенными метриками
+        """
+
+        num_classes = len(self.classes)
+        
+        # Почему я отключил синхранизацию?
+        # Потому что в моём случае обучение происходит не распределённо
+        sync_on_compute = False
+
+        PRESETS= {
+            'minimal': {
+                'accuracy': Accuracy(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    sync_on_compute=sync_on_compute
+                ),
+            },
+            'standard': {
+                'accuracy': Accuracy(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    sync_on_compute=sync_on_compute
+                ),
+                'precision': Precision(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='macro',
+                    sync_on_compute=sync_on_compute
+                ),
+                'recall': Recall(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='macro',
+                    sync_on_compute=sync_on_compute
+                ),
+                'f1': F1Score(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='macro',
+                    sync_on_compute=sync_on_compute
+                ),
+            },
+            'full': {
+                'accuracy': Accuracy(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    sync_on_compute=sync_on_compute
+                ),
+                'precision_macro': Precision(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='macro',
+                    sync_on_compute=sync_on_compute
+                ),
+                'precision_micro': Precision(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='micro',
+                    sync_on_compute=sync_on_compute
+                ),
+                'recall_macro': Recall(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='macro',
+                    sync_on_compute=sync_on_compute
+                ),
+                'recall_micro': Recall(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='micro',
+                    sync_on_compute=sync_on_compute
+                ),
+                'f1_macro': F1Score(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='macro',
+                    sync_on_compute=sync_on_compute
+                ),
+                'f1_micro': F1Score(
+                    task='multiclass', 
+                    num_classes=num_classes,
+                    average='micro',
+                    sync_on_compute=sync_on_compute
+                ),
+            },
+        }
+        
+        if preset not in PRESETS:
+            preset_available = list(PRESETS.keys())
+            raise ValueError(f"Unknown preset '{preset}'. Available: {preset_available}")
+        
+        metrics_dict = PRESETS[preset]
+        
+        metrics_dict['loss'] = MeanMetric(
+            sync_on_compute=sync_on_compute,
+            nan_strategy='ignore'
+        )
+        
+        collection = MetricCollection(
+            metrics_dict,
+            prefix=prefix,
+        ).to(self.device)
+        
+        return collection
+
     def _log_epoch_metric(
             self, 
-            epoch: int
+            epoch: int,
+            train_metrics_value,
+            val_metrics_value
         ):
         """
         Логирование метрик эпохи в MLflow
@@ -438,11 +572,8 @@ class Trainer:
             return
         try:
             metrics = {
-                'train_loss': self.history['train_loss'][-1],
-                'train_accuracy': self.history['train_accuracy'][-1],
-                'val_loss': self.history['val_loss'][-1],
-                'val_accuracy': self.history['val_accuracy'][-1],
-                'learning_rate': self.history['learning_rate'][-1],
+                **train_metrics_value,
+                **val_metrics_value,
                 'epoch': epoch
             }
 
@@ -538,17 +669,13 @@ class Trainer:
         except Exception as e:
             print(f"🔴[MLFlow] Error logging artifacts: {e}")
 
-    def _train_one(
-            self,
-        ):
+    def _train_one(self) -> None:
         """
         Проход по тренировочным данным и тренировка на них
         """
-        self.logger.debug("🔘 Start train")
+        self.logger.debug("🔘 Start epoch train")
+        
         self.model.train()
-
-        runner_loss = 0.0
-        correct_predictions = 0
 
         for data in self._tqdm_loader(self.train_loader, "Training"):
             inputs, labels = data
@@ -564,33 +691,30 @@ class Trainer:
             
             # back steps
             loss.backward()
-            self.optimizer.step()
+            self.optimizer.step()            
 
-            runner_loss += loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            correct_predictions += (predicted == labels).sum().item()
+            _, predicted = torch.max(outputs, dim=1)
             
+            self.train_metrics.update(
+                preds=predicted, 
+                target=labels,
+                value=loss.item()
+            )
+
             # cuda opyat ushla vsya pamyat'
             del inputs, labels, outputs, loss
         
         self.scheduler.step()
 
-        epoch_loss = runner_loss / len(self.train_loader)
-        epoch_accuracy = correct_predictions / self.train_loader_size
-        lr = self.optimizer.param_groups[0]['lr']
-
-        self.history['train_loss'].append(epoch_loss)
-        self.history['train_accuracy'].append(epoch_accuracy)
-        self.history['learning_rate'].append(lr)
+        train_metrics_value = self.train_metrics.compute()
+        self.logger.info(f"Loss train: {train_metrics_value['train_loss']}")
+        self.train_metrics.reset()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        self.logger.info(f"Epoch Result:")
-        self.logger.info(f" ➖ Train Loss: {epoch_loss:.4f}")
-        self.logger.info(f" ➖ Train Acc:  {epoch_accuracy:.4f}")
-        self.logger.info(f" ➖ LR:         {lr:.6f}")
-        self.logger.debug("🔘 Start train one")
+        self.logger.debug("🔘 Finish trainning data")
+        return train_metrics_value
 
     def _tqdm_loader(
             self,
@@ -616,9 +740,6 @@ class Trainer:
         """
         self.model.eval()
 
-        runner_loss = 0.0
-        correct_predictions = 0
-
         with torch.no_grad():
             for data in self._tqdm_loader(self.val_loader, "Validating"):
                 
@@ -629,25 +750,24 @@ class Trainer:
                 outputs = self.model(inputs)
                 loss = self.loss_fn(outputs, labels)
 
-                runner_loss += loss.item()
                 _, predicted = torch.max(outputs.data, 1)
-                correct_predictions += (predicted == labels).sum().item()
+                self.val_metrics.update(
+                    preds=predicted, 
+                    target=labels,
+                    value=loss.item()
+                )
                 
                 # cude opyat ushla vsya pamyat'
                 del inputs, outputs, labels, loss
 
-        avg_loss = runner_loss / (len(self.val_loader))
-        accuracy = correct_predictions / self.val_loader_size
-
-        self.history["val_loss"].append(avg_loss)
-        self.history["val_accuracy"].append(accuracy)
+        val_metrics_value = self.val_metrics.compute()
+        self.logger.info(f"Loss train: {val_metrics_value['val_loss']}")
+        self.val_metrics.reset()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
-        print(f"Validat:")
-        print(f" ➖ Val Loss: {avg_loss:.4f}")
-        print(f" ➖ Val Acc:  {accuracy:.4f}")
+            
+        return val_metrics_value
 
     def train_with_mlflow(
             self,
@@ -678,24 +798,28 @@ class Trainer:
 
             # надо изменить на что-то своё 
             # В планах поменять
-            best_val_acc = 0.0
+            # best_score = 0.0
 
             for epoch in range(epochs):
                 self.logger.info("="*20)
                 self.logger.info(f"🔄 Epoch[🔹{epoch+1}/{epochs}🔹] start")
-                self._train_one()
-                self._validate_one()
+                train_metrics_value = self._train_one()
+                val_metrics_value = self._validate_one()
                 
-                self._log_epoch_metric(epoch+1)
+                self._log_epoch_metric(
+                    epoch+1,
+                    train_metrics_value,
+                    val_metrics_value
+                )
 
-                if best_val_acc < self.history['val_accuracy'][-1]:
-                    best_val_acc = self.history['val_accuracy'][-1]
-                    self._log_model_checkpoint(epoch + 1)
+                # if best_score < self.history['val_accuracy'][-1]:
+                #     best_score = self.history['val_accuracy'][-1]
+                #     self._log_model_checkpoint(epoch + 1)
 
                 self.logger.info(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
 
             # Логируем все артефакты
-            self._log_training_artifacts()
+            # self._log_training_artifacts()
 
             if self.log_mlflow:
                 mlflow.end_run()
