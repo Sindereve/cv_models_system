@@ -1,9 +1,11 @@
-import mlflow
 import logging
 import sys
 from contextlib import contextmanager
-from mlflow.models.signature import infer_signature
+import mlflow
+from mlflow.types.schema import Schema, TensorSpec
+from mlflow.models.signature import ModelSignature
 from tqdm import tqdm
+import numpy as np
 import torch
 from torch import nn
 from torch import optim
@@ -364,7 +366,6 @@ class Trainer:
                 self.run_name = f"{self.model.__class__.__name__}_ep{epoch}_lr{lr}_time({time_str})"
 
             self.logger.debug(f"|├🟢 run name {self.run_name}")
-            self.logger.debug(f"|├🟢 run name {self.run_name}")
             self.logger.debug("|└🏁 FINISH MLflow setting")
         except Exception as e:
             self.logger.error(f"🔴 MLflow setup failed: {e}")
@@ -407,7 +408,7 @@ class Trainer:
                 'epochs': epochs,
             }
 
-            if hasattr(self, 'sheduler') and self.scheduler:
+            if hasattr(self, 'scheduler') and self.scheduler:
                 scheduler_params = {
                     'scheduler': self.scheduler.__class__.__name__,
                 }
@@ -585,30 +586,51 @@ class Trainer:
     def _log_model_checkpoint(self, epoch: int):
         """
         Логирование чекпоинтов модели
-        """
-        if not self.log_mlflow or not self.log_artifacts:
-            return
-            
+        """ 
         try:
             name = f"checkpoint_epoch_{epoch}"
             mlflow.pytorch.log_model(
                 self.model,
                 name=name,
+                step=epoch,
                 signature= self._create_mlflow_signature()
             )
-            print(f"🔵[MLFlow] log model ({name})")
+            self.logger.info(f"Log model ({name})")
         except Exception as e:
-            print(f"🔴[MLFlow] Error logging model: {e}")
+            self.logger.error(f"🔴 Error logging model: {e}")
 
-    def _create_mlflow_signature(self):
+    def _create_mlflow_signature(
+            self,
+        ):
+        """
+        Создание сигнатруы модели
+        """
         sample_batch = next(iter(self.train_loader))
+        imgs = sample_batch[0]
 
-        sample_inputs = sample_batch[0][:5]
-        sample_targets = sample_batch[1][:5]
+        with torch.no_grad():
+            self.model.eval()
+            test_output = self.model(imgs)
 
-        return infer_signature(
-            model_input=sample_inputs.numpy(),
-            model_output=sample_targets.numpy()
+        input_schema = Schema([
+            TensorSpec(
+                type=np.dtype(np.float32),
+                shape=(imgs.shape),
+                name="input_images" 
+            )
+        ])
+
+        output_schema = Schema([
+            TensorSpec(
+                type=np.dtype(np.float32),
+                shape=(test_output.shape),
+                name="out_labels" 
+            )
+        ])
+
+        return ModelSignature(
+            inputs=input_schema,
+            outputs=output_schema
         )
 
     def _log_training_artifacts(self):
@@ -619,53 +641,7 @@ class Trainer:
             return
             
         try:
-            import matplotlib.pyplot as plt
-            import tempfile
-            
-            # Создаем временную директорию для артефактов
-            with tempfile.TemporaryDirectory() as temp_dir:
-                
-                # График потерь
-                plt.figure(figsize=(12, 4))
-                
-                plt.subplot(1, 2, 1)
-                plt.plot(self.history['train_loss'], label='Train Loss')
-                plt.plot(self.history['val_loss'], label='Val Loss')
-                plt.title('Model Loss')
-                plt.xlabel('Epoch')
-                plt.ylabel('Loss')
-                plt.legend()
-                plt.grid(True)
-                
-                plt.subplot(1, 2, 2)
-                plt.plot(self.history['train_accuracy'], label='Train Accuracy')
-                plt.plot(self.history['val_accuracy'], label='Val Accuracy')
-                plt.title('Model Accuracy')
-                plt.xlabel('Epoch')
-                plt.ylabel('Accuracy')
-                plt.legend()
-                plt.grid(True)
-                
-                plt.tight_layout()
-                loss_plot_path = os.path.join(temp_dir, 'training_metrics.png')
-                plt.savefig(loss_plot_path)
-                plt.close()
-                
-                mlflow.log_artifact(loss_plot_path)
-                
-                # Логируем историю обучения в файл
-                history_path = os.path.join(temp_dir, 'training_history.txt')
-                with open(history_path, 'w') as f:
-                    f.write("Epoch\tTrain_Loss\tTrain_Acc\tVal_Loss\tVal_Acc\tLR\n")
-                    for i in range(len(self.history['train_loss'])):
-                        f.write(f"{i+1}\t{self.history['train_loss'][i]:.4f}\t"
-                               f"{self.history['train_accuracy'][i]:.4f}\t"
-                               f"{self.history['val_loss'][i]:.4f}\t"
-                               f"{self.history['val_accuracy'][i]:.4f}\t"
-                               f"{self.history['learning_rate'][i]:.6f}\n")
-                
-                mlflow.log_artifact(history_path)
-                
+            pass
         except Exception as e:
             print(f"🔴[MLFlow] Error logging artifacts: {e}")
 
@@ -712,6 +688,7 @@ class Trainer:
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
         self.logger.debug("🔘 Finish trainning data")
         return train_metrics_value
@@ -761,7 +738,7 @@ class Trainer:
                 del inputs, outputs, labels, loss
 
         val_metrics_value = self.val_metrics.compute()
-        self.logger.info(f"Loss train: {val_metrics_value['val_loss']}")
+        self.logger.info(f"Validation train: {val_metrics_value['val_loss']}")
         self.val_metrics.reset()
 
         if torch.cuda.is_available():
@@ -798,7 +775,7 @@ class Trainer:
 
             # надо изменить на что-то своё 
             # В планах поменять
-            # best_score = 0.0
+            minimal_loss = float('inf')
 
             for epoch in range(epochs):
                 self.logger.info("="*20)
@@ -812,9 +789,9 @@ class Trainer:
                     val_metrics_value
                 )
 
-                # if best_score < self.history['val_accuracy'][-1]:
-                #     best_score = self.history['val_accuracy'][-1]
-                #     self._log_model_checkpoint(epoch + 1)
+                if minimal_loss > val_metrics_value['val_loss']:
+                    minimal_loss = val_metrics_value['val_loss']
+                    self._log_model_checkpoint(epoch + 1)
 
                 self.logger.info(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
 
