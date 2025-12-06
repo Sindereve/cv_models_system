@@ -312,6 +312,8 @@ class Trainer:
         run = None
         try:
             run = mlflow.start_run(run_name=self.run_name) 
+            mlflow.log_dict(self.dataset_info, self.dataset_path)
+
             self.mlflow_run = run
             
             yield
@@ -574,26 +576,29 @@ class Trainer:
         try:
             metrics = {
                 **train_metrics_value,
-                **val_metrics_value,
-                'epoch': epoch
+                **val_metrics_value
             }
 
             mlflow.log_metrics(metrics, step=epoch)
 
         except Exception as e:
-            print("🔴[MLFlow] Error set params model:", e)
+            self.logger.error("🔴 Error set metric in mlflow:", e)
 
     def _log_model_checkpoint(self, epoch: int):
         """
         Логирование чекпоинтов модели
         """ 
         try:
-            name = f"checkpoint_epoch_{epoch}"
+            run_name = self.run_name.replace(".","_")
+            run_name = run_name.replace(":","_")
+            name = f"{run_name}_checkpoint_epoch_{epoch}"
+
             mlflow.pytorch.log_model(
                 self.model,
                 name=name,
                 step=epoch,
-                signature= self._create_mlflow_signature()
+                signature= self._create_mlflow_signature(),
+                registered_model_name=run_name
             )
             self.logger.info(f"Log model ({name})")
         except Exception as e:
@@ -643,7 +648,7 @@ class Trainer:
         try:
             pass
         except Exception as e:
-            print(f"🔴[MLFlow] Error logging artifacts: {e}")
+            self.logger.error(f"🔴 Error set artifacts in mlflow: {e}")
 
     def _train_one(self) -> None:
         """
@@ -690,7 +695,7 @@ class Trainer:
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
 
-        self.logger.debug("🔘 Finish trainning data")
+        self.logger.debug("🏁 Finish trainning data")
         return train_metrics_value
 
     def _tqdm_loader(
@@ -715,6 +720,7 @@ class Trainer:
         """
         1 проход по валидационным данным
         """
+        self.logger.debug("🔘 Start val data")
         self.model.eval()
 
         with torch.no_grad():
@@ -743,7 +749,9 @@ class Trainer:
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-            
+            torch.cuda.synchronize()
+        
+        self.logger.debug("🏁 Finish val data")
         return val_metrics_value
 
     def train_with_mlflow(
@@ -758,8 +766,8 @@ class Trainer:
         """
         self.logger.info("🔘 Start train")
         if not self.log_mlflow:
-            self.logger.error("MLFlow - OFF in params the class")
-            self.logger.error("TRAIN STOP")
+            self.logger.error("🔴 MLFlow - OFF in params the class")
+            self.logger.error("🔴 TRAIN STOP")
             return self.model
 
         self._setup_mlflow(
@@ -796,7 +804,7 @@ class Trainer:
                 self.logger.info(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
 
             # Логируем все артефакты
-            # self._log_training_artifacts()
+            self._log_training_artifacts()
 
             if self.log_mlflow:
                 mlflow.end_run()
