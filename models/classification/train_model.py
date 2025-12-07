@@ -17,6 +17,8 @@ from torchmetrics.classification import (
 )
 from torchmetrics import MeanMetric
 
+import asyncio
+from functools import partial
 import time
 from typing import Optional, Dict
 
@@ -361,6 +363,7 @@ class Trainer:
             self.logger.debug("|🔘 START MLflow setting")
             
             mlflow.set_experiment(self.experiment_name)
+            mlflow.enable_system_metrics_logging()
 
             if self.run_name is None:
                 time_str = time.strftime('%m:%d_%H:%M:%S')
@@ -583,20 +586,44 @@ class Trainer:
         except Exception as e:
             self.logger.error("🔴 Error set metric in mlflow:", e)
 
-    def _log_checkpoint(self, epoch: int) -> str:
+    async def _log_checkpoint_async(self, *args, **kwargs):
+        """
+        Ассинхронная версия логирования
+        """
+        try:
+            self.logger.debug(f"|🔘 Start async checkpoint save")
+
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                self._log_checkpoint_sync,
+                *args, **kwargs
+            )
+
+            self.logger.debug(f"|🟢 Async checkpoint saved")
+        except Exception as e:
+            self.logger.error(f"🔴 Async checkpoint error: {e}")
+
+    def _log_checkpoint(self, epoch: int):
         """
         Логирование чекпоинта
         """ 
         try:
+            self.logger.debug(f"|🔘 Start save checkpoint(save_model)")
             name = f"checkpoint_epoch_{epoch}"
+            import copy 
+            model_cpu = copy.deepcopy(self.model).to('cpu')
+            model_cpu.eval()
 
             mlflow.pytorch.log_model(
-                self.model,
+                model_cpu,
                 name=name,
                 step=epoch,
-                signature= self._create_mlflow_signature(),
+                signature=self._create_mlflow_signature(model_cpu),
                 await_registration_for=0
             )
+            
+            del model_cpu
             self.logger.debug(f"|🟢 Checkpoint(save_model)")
             
         except Exception as e:
@@ -604,16 +631,16 @@ class Trainer:
 
     def _create_mlflow_signature(
             self,
+            model_cpu
         ):
         """
         Создание сигнатруы модели
         """
         sample_batch = next(iter(self.train_loader))
-        imgs = sample_batch[0]
+        imgs = sample_batch[0].to('cpu')
 
         with torch.no_grad():
-            self.model.eval()
-            test_output = self.model(imgs)
+            test_output = model_cpu(imgs)
 
         input_schema = Schema([
             TensorSpec(
@@ -782,7 +809,6 @@ class Trainer:
             # надо изменить на что-то своё 
             # В планах поменять
             minimal_loss = float('inf')
-            best_checkpoint_patch = None
 
             for epoch in range(epochs):
                 self.logger.info("="*20)
@@ -798,7 +824,8 @@ class Trainer:
 
                 if minimal_loss > val_metrics_value['val_loss']:
                     minimal_loss = val_metrics_value['val_loss']
-                    best_checkpoint_patch = self._log_checkpoint(epoch + 1)
+                    # asyncio.create_task(self._log_checkpoint_async(epoch + 1))
+                    self._log_checkpoint(epoch+1)
 
                 self.logger.info(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
 
@@ -806,3 +833,4 @@ class Trainer:
             self._log_training_artifacts()
 
             self.logger.info("🏁 Finish train")
+            return self.model
