@@ -20,8 +20,6 @@ from torchmetrics import MeanMetric
 import time
 from typing import Optional, Dict
 
-import os
-os.environ['MLFLOW_SUPPRESS_RUN_LOGS'] = 'true'
 
 class Trainer:
     def __init__(
@@ -164,6 +162,7 @@ class Trainer:
         console_handler.setFormatter(formatter)
         
         logger.addHandler(console_handler)
+        logger.propagate = False # This fix bug for dublicatid logger
         
         logging.addLevelName(logging.INFO,    "💙 [ INFO  ]")
         logging.addLevelName(logging.WARNING, "💛 [WARNING]")
@@ -246,6 +245,7 @@ class Trainer:
         else:
             self.logger.debug(f"|├🟢 optimizer: OK")
 
+        # lr_scheduler
         if not isinstance(self.scheduler, lr_scheduler._LRScheduler):
             self.logger.warning(f"🟠 scheduler is not {lr_scheduler._LRScheduler}. Change in default value({lr_scheduler.CosineAnnealingLR})")
             self.scheduler = lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=50)
@@ -312,22 +312,21 @@ class Trainer:
         run = None
         try:
             run = mlflow.start_run(run_name=self.run_name) 
-            mlflow.log_dict(self.dataset_info, self.dataset_path)
-
             self.mlflow_run = run
+            self.logger.debug(f"|🟢 MLflow run started: {run.info.run_id}")
             
             yield
-            
-            if run:
-                mlflow.end_run(status="FINISHED")
-                self.logger.debug("└🏁 MLflow run finished successfully")
+                        
+            mlflow.end_run(status="FINISHED")
+            self.logger.debug("└🏁 MLflow run finished successfully")
                 
         except Exception as e:
             if run:
                 mlflow.end_run(status="FAILED")
-                self.logger.error(f"🔴 MLflow run failed: {e}")
-
+            
+            self.logger.error(f"🔴 MLflow run failed: {e}")
             raise
+
         finally:
             self._ensure_run_closed(run)
 
@@ -584,25 +583,24 @@ class Trainer:
         except Exception as e:
             self.logger.error("🔴 Error set metric in mlflow:", e)
 
-    def _log_model_checkpoint(self, epoch: int):
+    def _log_checkpoint(self, epoch: int) -> str:
         """
-        Логирование чекпоинтов модели
+        Логирование чекпоинта
         """ 
         try:
-            run_name = self.run_name.replace(".","_")
-            run_name = run_name.replace(":","_")
-            name = f"{run_name}_checkpoint_epoch_{epoch}"
+            name = f"checkpoint_epoch_{epoch}"
 
             mlflow.pytorch.log_model(
                 self.model,
                 name=name,
                 step=epoch,
                 signature= self._create_mlflow_signature(),
-                registered_model_name=run_name
+                await_registration_for=0
             )
-            self.logger.info(f"Log model ({name})")
+            self.logger.debug(f"|🟢 Checkpoint(save_model)")
+            
         except Exception as e:
-            self.logger.error(f"🔴 Error logging model: {e}")
+            self.logger.error(f"🔴 Error logging сheckpoint: {e}")
 
     def _create_mlflow_signature(
             self,
@@ -784,6 +782,7 @@ class Trainer:
             # надо изменить на что-то своё 
             # В планах поменять
             minimal_loss = float('inf')
+            best_checkpoint_patch = None
 
             for epoch in range(epochs):
                 self.logger.info("="*20)
@@ -799,14 +798,11 @@ class Trainer:
 
                 if minimal_loss > val_metrics_value['val_loss']:
                     minimal_loss = val_metrics_value['val_loss']
-                    self._log_model_checkpoint(epoch + 1)
+                    best_checkpoint_patch = self._log_checkpoint(epoch + 1)
 
                 self.logger.info(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
 
             # Логируем все артефакты
             self._log_training_artifacts()
-
-            if self.log_mlflow:
-                mlflow.end_run()
 
             self.logger.info("🏁 Finish train")
