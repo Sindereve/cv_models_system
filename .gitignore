@@ -6,5 +6,6 @@ mlruns
 mlartifacts
 
 # данные
-/data
+trainer/src/data
 mlflow.db
+utils/

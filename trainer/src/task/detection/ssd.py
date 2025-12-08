@@ -1,6 +1,7 @@
 from torch import nn
 from torchvision.models.detection import ssd300_vgg16, ssdlite320_mobilenet_v3_large
 from torchvision.models.detection.ssd import SSD as SSD_torchvision
+from torchvision.models.detection import ssd as ssd_module
 
 class SSD(nn.Module):
     def __init__(
@@ -19,7 +20,11 @@ class SSD(nn.Module):
         """
         super().__init__()
 
-        self.model:SSD_torchvision = self._load_model(model_name, weights, num_class)
+        self.model:SSD_torchvision = self._load_model(
+            model_name, 
+            weights, 
+            num_classes=num_class
+        )
         self.model_name = model_name
 
     def forward(self, x, targets=None):
@@ -43,28 +48,24 @@ class SSD(nn.Module):
             weights: bool,
             num_classes: int
         ) -> SSD_torchvision:
-        """
-        Загрузка модели SSD с опциональными предобученными весами.
-
-        Params:
-            model_name: имя модели
-            weights: загруженная модель будет с весами
-            num_classes: количество классов
-        """
 
         model_mapping = {
-            "resnet18": ssd300_vgg16,
-            "resnet34": ssdlite320_mobilenet_v3_large, 
+            "ssd300_vgg16": ssd300_vgg16,
+            "ssdlite320_mobilenet_v3_large": ssdlite320_mobilenet_v3_large, 
         }
         
         if model_name not in model_mapping:
             raise ValueError(f"Unknown model name: {model_name}. Available: {list(model_mapping.keys())}")
 
-        model: SSD_torchvision = model_mapping[model_name](weights="DEFAULT" if weights else None, num_classes=num_classes)
-        
-        # Заморозка весов
         if weights:
-            for param in model.backbone.parameters():
-                param.requires_grad = False
-
+            model: SSD_torchvision = model_mapping[model_name](
+                weights="DEFAULT", 
+                num_classes=91
+            )
+        else:
+            model: SSD_torchvision = model_mapping[model_name](
+                weights=None, 
+                num_classes=num_classes
+            )
+        
         return model
