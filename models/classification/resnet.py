@@ -29,6 +29,14 @@ class ResNet(nn.Module):
         in_features = self.model.fc.in_features
         self.model.fc = nn.Linear(in_features, num_class)
 
+        self.model_mapping = {
+            "resnet18": resnet18,
+            "resnet34": resnet34, 
+            "resnet50": resnet50,
+            "resnet101": resnet101,
+            "resnet152": resnet152
+        }
+
     def forward(self, x):
         return self.model(x)
     
@@ -50,19 +58,11 @@ class ResNet(nn.Module):
             model_name: имя модели
             weights: загруженная модель будет с весами
         """
-
-        model_mapping = {
-            "resnet18": resnet18,
-            "resnet34": resnet34, 
-            "resnet50": resnet50,
-            "resnet101": resnet101,
-            "resnet152": resnet152
-        }
         
-        if model_name not in model_mapping:
-            raise ValueError(f"Unknown model name: {model_name}. Available: {list(model_mapping.keys())}")
+        if model_name not in self.model_mapping:
+            raise ValueError(f"Unknown model name: {model_name}. Available: {list(self.model_mapping.keys())}")
 
-        model: ResNet = model_mapping[model_name](weights="DEFAULT" if weights else None)
+        model: ResNet = self.model_mapping[model_name](weights="DEFAULT" if weights else None)
         
         # Заморозка весов
         if weights:

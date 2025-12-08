@@ -9,7 +9,7 @@ class VGG(nn.Module):
     def __init__(
             self, 
             num_class: int,
-            model_name: str = 'resnet18', 
+            model_name: str = 'vgg19', 
             weights: bool = False,
         ):
         """
@@ -27,6 +27,17 @@ class VGG(nn.Module):
 
         in_features = self.model.classifier[6].in_features
         self.model.classifier[6] = nn.Linear(in_features, num_class)
+
+        self.model_mapping = {
+            "vgg11": vgg11,
+            "vgg11_bn": vgg11_bn, 
+            "vgg13": vgg13,
+            "vgg13_bn": vgg13_bn,
+            "vgg16": vgg16,
+            "vgg16_bn": vgg16_bn,
+            "vgg19": vgg19,
+            "vgg19_bn": vgg19_bn
+        }
 
     def forward(self, x):
         return self.model(x)
@@ -50,21 +61,11 @@ class VGG(nn.Module):
             weights: загруженная модель будет с весами
         """
 
-        model_mapping = {
-            "vgg11": vgg11,
-            "vgg11_bn": vgg11_bn, 
-            "vgg13": vgg13,
-            "vgg13_bn": vgg13_bn,
-            "vgg16": vgg16,
-            "vgg16_bn": vgg16_bn,
-            "vgg19": vgg19,
-            "vgg19_bn": vgg19_bn
-        }
         
-        if model_name not in model_mapping:
-            raise ValueError(f"Unknown model name: {model_name}. Available: {list(model_mapping.keys())}")
+        if model_name not in self.model_mapping:
+            raise ValueError(f"Unknown model name: {model_name}. Available: {list(self.model_mapping.keys())}")
 
-        model: VGG = model_mapping[model_name](weights="DEFAULT" if weights else None)
+        model: VGG = self.model_mapping[model_name](weights="DEFAULT" if weights else None)
         
         # Замарозка весов
         if weights:
