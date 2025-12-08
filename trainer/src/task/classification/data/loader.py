@@ -4,15 +4,30 @@ import tqdm
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms, datasets
 
-def load_dataloader_classification(
+class TransformDataset(torch.utils.data.Dataset):
+    def __init__(self, subset, transform=None):
+        self.subset = subset
+        self.transform = transform
+
+    def __getitem__(self, index):
+        x, y = self.subset[index]
+        if self.transform:
+            x = self.transform(x)
+        return x, y
+
+    def __len__(self):
+        return len(self.subset)
+
+def load_dataloader(
         path_data_dir: str,
         img_w_size: int = 224,
         img_h_size: int = 224,
         total_img: int = 0,
         batch_size: int = 32,
-        train_ration: float = 0.8,
-        is_calculate_normalize_dataset: bool = True
-    ) -> Tuple[DataLoader, DataLoader, List[str]]:
+        train_ratio: float = 0.75,
+        val_ratio: float = 0.15,
+        is_calculate_normalize_dataset: bool = False
+    ) -> Tuple[DataLoader, DataLoader, DataLoader, List[str]]:
     """
     Созданиём Dataloader
 
@@ -22,12 +37,14 @@ def load_dataloader_classification(
         img_h_size: высота изображений после преобразований
         total_img: количество изображений, которое нужно
         batch_size: размер батчей
-        train_ration: отношение тренировочных данных к всем данным
+        train_ratio: отношение тренировочных данных к всем данным
+        val_ratio: отношение валидационных данных к всем данным
         is_calculate_normalize_dataset: нужно ли нормализировать наши данные
 
     Returns:
         Dataloader: Dataloader для тренировочных данных
         Dataloader: Dataloader для валидационнх данных
+        Dataloader: Dataloader для тестовых данных
         list[str]: список названий классов
     """
     print("⚪[load_dataloader_classification] start create dataloaders")
@@ -37,89 +54,91 @@ def load_dataloader_classification(
         transforms.ToTensor()
     ])
 
-    temp_dataset = datasets.ImageFolder(
+    # full dataset
+    full_dataset = datasets.ImageFolder(
         root=path_data_dir,
         transform=base_transform
     )
 
-    temp_loader = DataLoader(
-        temp_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-    )
-
-    classes = temp_loader.dataset.class_to_idx
-
-    if is_calculate_normalize_dataset:
-        print("🟣[normalize_dataset] processing")
-        mean, std = calculate_normalize_datasets(temp_loader)
-    
-        train_transform = transforms.Compose([
-            transforms.RandomResizedCrop(
-                size=(img_h_size, img_w_size),
-                scale=(0.7, 1.0)
-            ),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(10),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std)
-        ])
-
-        val_transform = transforms.Compose([
-            transforms.Resize(size=(img_h_size, img_w_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std)
-        ])
-    else:
-        train_transform = transforms.Compose([
-            transforms.RandomResizedCrop(
-                size=(img_h_size, img_w_size),
-                scale=(0.7, 1.0)
-            ),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(10),
-            transforms.ToTensor(),
-        ])
-
-        val_transform = transforms.Compose([
-            transforms.Resize(size=(img_h_size, img_w_size)),
-            transforms.ToTensor(),
-        ])
+    classes = list(full_dataset.class_to_idx.keys())
 
     if total_img == 0:
-        total_img = len(temp_dataset)
+        total_img = len(full_dataset)
 
-    indxs = torch.randperm(len(temp_dataset))[:total_img]
-    temp_dataset = Subset(temp_dataset, indxs)
+    # subset load
+    indxs = torch.randperm(len(full_dataset))[:total_img]
+    subset = Subset(full_dataset, indxs)
 
-    train_size = int(train_ration * total_img)
-    val_size = total_img - train_size
-
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        temp_dataset, [train_size, val_size]
+    loader_for_norm = DataLoader(
+        dataset=subset,
+        batch_size=batch_size
     )
 
-    train_dataset.dataset.transform = train_transform
-    val_dataset.dataset.transform = val_transform
+    if is_calculate_normalize_dataset:
+        mean, std = calculate_normalize_datasets(loader_for_norm)
+    else:
+        mean, std = None, None
 
+    train_transform = transforms.Compose([
+        transforms.RandomResizedCrop((img_h_size, img_w_size), scale=(0.7, 1.0)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(10),
+    ])
+
+    val_train_transform = transforms.Compose([
+        transforms.Resize((img_h_size, img_w_size)),
+    ])
+
+    if mean is not None:
+        train_transform.transforms.append(transforms.Normalize(mean, std))
+        val_train_transform.transforms.append(transforms.Normalize(mean, std))
+
+
+    # split subset train/val/test 
+    train_size = int(train_ratio * total_img)
+    val_size = int(val_ratio * total_img)
+    test_size = total_img - train_size - val_size
+
+    train_subset, val_subset, test_subset = torch.utils.data.random_split(
+        subset, [train_size, val_size, test_size]
+    )
+
+    train_dataset = TransformDataset(train_subset, transform=train_transform)
+    val_dataset = TransformDataset(val_subset, transform=val_train_transform)
+    test_dataset = TransformDataset(val_subset, transform=val_train_transform)
+
+    # dataloaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
+        num_workers=2,
+        pin_memory=True,
     )
 
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
+        num_workers=2,
+        pin_memory=True,
+    )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True
     )
 
     print("🟢[load_dataloader_classification] finish create dataloaders")
-    print(f" ➖ Train samples: {len(train_dataset)}")
-    print(f" ➖ Val samples:   {len(val_dataset)}")
+    print(f" ➖ Train samples: {train_size}")
+    print(f" ➖ Val samples:   {val_size}")
+    print(f" ➖ Test samples:  {test_size}")
     print(f" ➖ Classes:       {classes}")
 
-    return train_loader, val_loader, classes
+    return train_loader, val_loader, test_loader, classes
 
 
 def calculate_normalize_datasets(

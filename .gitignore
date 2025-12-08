@@ -5,7 +5,7 @@ __pycache__
 mlruns
 mlartifacts
 
-# данные
+# trainer service
 trainer/src/data
-mlflow.db
-utils/
+trainer/src/shared
+utils_old/

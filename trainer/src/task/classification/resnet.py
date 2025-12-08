@@ -5,6 +5,14 @@ from torchvision.models import (
     resnet152, ResNet
 )
 
+model_mapping = {
+    "resnet18": resnet18,
+    "resnet34": resnet34, 
+    "resnet50": resnet50,
+    "resnet101": resnet101,
+    "resnet152": resnet152
+}
+
 class ResNet(nn.Module):
     def __init__(
             self, 
@@ -29,14 +37,6 @@ class ResNet(nn.Module):
         in_features = self.model.fc.in_features
         self.model.fc = nn.Linear(in_features, num_class)
 
-        self.model_mapping = {
-            "resnet18": resnet18,
-            "resnet34": resnet34, 
-            "resnet50": resnet50,
-            "resnet101": resnet101,
-            "resnet152": resnet152
-        }
-
     def forward(self, x):
         return self.model(x)
     
@@ -59,10 +59,10 @@ class ResNet(nn.Module):
             weights: загруженная модель будет с весами
         """
         
-        if model_name not in self.model_mapping:
+        if model_name not in model_mapping:
             raise ValueError(f"Unknown model name: {model_name}. Available: {list(self.model_mapping.keys())}")
 
-        model: ResNet = self.model_mapping[model_name](weights="DEFAULT" if weights else None)
+        model: ResNet = model_mapping[model_name](weights="DEFAULT" if weights else None)
         
         # Заморозка весов
         if weights:

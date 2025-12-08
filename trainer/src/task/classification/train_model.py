@@ -22,6 +22,7 @@ from functools import partial
 import time
 from typing import Optional, Dict
 
+from shared.logging import get_logger
 
 class Trainer:
     def __init__(
@@ -77,7 +78,8 @@ class Trainer:
         """
 
         # logger load
-        self.logger = self._setup_logger(logger_lvl)
+        self.logger = get_logger(__name__)
+        # self._setup_logger(logger_lvl)
         self.logger.debug("⚪ Start init")
 
         # model and setting learning
@@ -216,12 +218,10 @@ class Trainer:
                 self.logger.error(f"|└🔴 {name} is not {type}. Type value is {type(obj)}")
                 raise TypeError(f"{name} must be {type}")
             
-            if type == DataLoader:
-                try:
-                    next(iter(obj.dataset))
-                except StopIteration:
+            if isinstance(obj, DataLoader):
+                if len(obj.dataset) == 0:
                     self.logger.error(f"|└🔴 {name}({type}) is empty.")
-                    raise StopIteration(f"{name}({type}) is empty.")
+                    raise ValueError(f"{name}({type}) is empty.")
             
             self.logger.debug(f"|├🟢 {name}: OK")
 
