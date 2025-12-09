@@ -34,7 +34,6 @@ class Trainer:
             test_loader: DataLoader = None,
             classes: Optional[Dict] = None,
             # settings for train model
-            logger_lvl: str = 'debug',
             loss_fn: Optional[nn.Module] = None,
             optimizer: Optional[Optimizer] = None,
             scheduler: Optional[lr_scheduler._LRScheduler] = None,
@@ -57,12 +56,6 @@ class Trainer:
             val_loader: Данные для валидации
             test_loader: Данные для тестирования
             classes: Классы в данных(словарь[значение: индекс класса])
-
-            logger_lvl: Уровень логирования, один из 3 варинтов: 
-                * 'info' - выводится информация об обучении модели
-                * 'debug' - выводится вся информация о работе тренера.
-                * 'warning' - выводятся только ошибки и предупреждения
-                * 'error' - выводятся только ошибки
             loss_fn: Функция потерь
             optimizer: Оптимизатор
             scheduler: Планировщик learning rate
@@ -79,7 +72,6 @@ class Trainer:
 
         # logger load
         self.logger = get_logger(__name__)
-        # self._setup_logger(logger_lvl)
         self.logger.debug("⚪ Start init")
 
         # model and setting learning
