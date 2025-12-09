@@ -131,51 +131,6 @@ class Trainer:
 
         self.logger.debug("🏁 Finish init")
 
-    def _setup_logger(
-            self, 
-            logger_lvl: str
-        ):
-        """
-        Настройка логера
-        
-        Args:
-            logger_lvl: уровень логирования ('debug', 'info', 'warning', 'error')
-        """
-        logger = logging.getLogger(f"Trainer")
-        
-        logger.handlers.clear()
-
-        if logger_lvl == 'debug':
-            logger.setLevel(logging.DEBUG)
-        elif logger_lvl == 'info':
-            logger.setLevel(logging.INFO)
-        elif logger_lvl == 'warning':
-            logger.setLevel(logging.WARNING)
-        elif logger_lvl == 'error':
-            logger.setLevel(logging.ERROR)
-        else:
-            logger.setLevel(logging.INFO)
-        
-        formatter = logging.Formatter(
-            "%(asctime)s | %(levelname)s | %(message)s",
-            datefmt="%H:%M:%S"
-        )
-        
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logger.level)
-        console_handler.setFormatter(formatter)
-        
-        logger.addHandler(console_handler)
-        logger.propagate = False # This fix bug for dublicatid logger
-        
-        logging.addLevelName(logging.INFO,    "💙 [ INFO  ]")
-        logging.addLevelName(logging.WARNING, "💛 [WARNING]")
-        logging.addLevelName(logging.ERROR,   "💔 [ ERROR ]")
-        logging.addLevelName(logging.DEBUG,   "🔎 [ DEBUG ]")
-
-        logger.debug(f"Logger build.")
-        return logger
-
     def _get_size_datasets(self):
         self.logger.debug("├🔘 Calculate size data")
     
