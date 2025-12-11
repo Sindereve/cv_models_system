@@ -9,3 +9,4 @@ mlartifacts
 trainer/src/data
 trainer/src/shared
 utils_old/
+trainer/src/tester.ipynb

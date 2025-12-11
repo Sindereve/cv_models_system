@@ -37,6 +37,7 @@ class Trainer:
             loss_fn: Optional[nn.Module] = None,
             optimizer: Optional[Optimizer] = None,
             scheduler: Optional[lr_scheduler._LRScheduler] = None,
+            epochs: int = 10,
             device: Optional[torch.device] = None,
             # mlflow tracking
             log_mlflow: bool = True,
@@ -59,6 +60,7 @@ class Trainer:
             loss_fn: Функция потерь
             optimizer: Оптимизатор
             scheduler: Планировщик learning rate
+            epochs: Количество эпох при обучении
             device: Устройство вычислений GPU\\CPU
 
             log_mlflow: Флаг логирования в MLflow
@@ -79,6 +81,7 @@ class Trainer:
         self.loss_fn = loss_fn 
         self.optimizer = optimizer 
         self.scheduler = scheduler
+        self.epochs = epochs
         self.device = device
 
         # data
@@ -294,11 +297,7 @@ class Trainer:
         except:
             pass
 
-    def _setup_mlflow(
-            self,
-            epoch: int,
-            lr: int
-        ):
+    def _setup_mlflow(self):
         """
         Настройка MLflow
         """
@@ -314,7 +313,9 @@ class Trainer:
 
             if self.run_name is None:
                 time_str = time.strftime('%m:%d_%H:%M:%S')
-                self.run_name = f"{self.model.__class__.__name__}_ep{epoch}_lr{lr}_time({time_str})"
+                lr = self.optimizer.param_groups[0]['lr']
+                
+                self.run_name = f"{self.model.__class__.__name__}_ep{self.epochs}_lr{lr}_time({time_str})"
 
             self.logger.debug(f"|├🟢 run name {self.run_name}")
             self.logger.debug("|└🏁 FINISH MLflow setting")
@@ -323,10 +324,7 @@ class Trainer:
             self.logger.warning("🟠 No use tracking MLflow")
             self.log_mlflow = False
 
-    def _mlflow_log_parameters(
-            self,
-            epochs: int,
-        ):
+    def _mlflow_log_parameters(self):
         """
         Логирование параметров модели и обучения
         """
@@ -356,7 +354,7 @@ class Trainer:
             }
 
             training_params = {
-                'epochs': epochs,
+                'epochs': self.epochs,
             }
 
             if hasattr(self, 'scheduler') and self.scheduler:
@@ -726,10 +724,7 @@ class Trainer:
         self.logger.debug("🏁 Finish val data")
         return val_metrics_value
 
-    def train_with_mlflow(
-            self,
-            epochs: int = 20,
-        ) -> nn.Module:
+    def train_with_mlflow(self) -> nn.Module:
         """
         Полный цикл тренировки
         
@@ -742,24 +737,19 @@ class Trainer:
             self.logger.error("🔴 TRAIN STOP")
             return self.model
 
-        self._setup_mlflow(
-            epochs, 
-            self.optimizer.param_groups[0]['lr']
-        )
+        self._setup_mlflow()
         
         with self.mlflow_run_manager():
             
-            self._mlflow_log_parameters(
-                epochs
-            )
+            self._mlflow_log_parameters()
 
             # надо изменить на что-то своё 
             # В планах поменять
             minimal_loss = float('inf')
 
-            for epoch in range(epochs):
+            for epoch in range(self.epochs):
                 self.logger.info("="*20)
-                self.logger.info(f"🔄 Epoch[🔹{epoch+1}/{epochs}🔹] start")
+                self.logger.info(f"🔄 Epoch[🔹{epoch+1}/{self.epochs}🔹] start")
                 train_metrics_value = self._train_one()
                 val_metrics_value = self._validate_one()
                 
@@ -774,7 +764,7 @@ class Trainer:
                     # asyncio.create_task(self._log_checkpoint_async(epoch + 1))
                     self._log_checkpoint(epoch+1)
 
-                self.logger.info(f"🟢 Epoch[🔹{epoch+1}/{epochs}🔹] completed")
+                self.logger.info(f"🟢 Epoch[🔹{epoch+1}/{self.epochs}🔹] completed")
 
             # Логируем все артефакты
             self._log_training_artifacts()
