@@ -1,9 +1,6 @@
 from torch import nn
-from torchvision.models import (
-    resnet18, resnet34, 
-    resnet50, resnet101, 
-    resnet152, ResNet
-)
+from .registry import register
+from torchvision.models import *
 
 model_mapping = {
     "resnet18": resnet18,
@@ -13,11 +10,12 @@ model_mapping = {
     "resnet152": resnet152
 }
 
+@register("resnet")
 class ResNet(nn.Module):
     def __init__(
             self, 
             num_class: int,
-            model_name: str = 'resnet18', 
+            name: str = 'resnet18', 
             weights: bool = False,
         ):
         """
@@ -31,8 +29,8 @@ class ResNet(nn.Module):
         super().__init__()
 
 
-        self.model = self._load_model(model_name, weights)
-        self.model_name = model_name
+        self.model = self._load_model(name, weights)
+        self.model_name = name
 
         in_features = self.model.fc.in_features
         self.model.fc = nn.Linear(in_features, num_class)

@@ -1,15 +1,24 @@
 from torch import nn
-from torchvision.models import (
-    vgg11, vgg11_bn, vgg13, vgg13_bn,
-    vgg16, vgg16_bn, vgg19, vgg19_bn,
-    VGG
-)
+from .registry import register
+from torchvision.models import *
 
+model_mapping = {
+    "vgg11": vgg11,
+    "vgg11_bn": vgg11_bn, 
+    "vgg13": vgg13,
+    "vgg13_bn": vgg13_bn,
+    "vgg16": vgg16,
+    "vgg16_bn": vgg16_bn,
+    "vgg19": vgg19,
+    "vgg19_bn": vgg19_bn
+}
+
+@register("vgg")
 class VGG(nn.Module):
     def __init__(
             self, 
             num_class: int,
-            model_name: str = 'vgg19', 
+            name: str = 'vgg19', 
             weights: bool = False,
         ):
         """
@@ -22,22 +31,13 @@ class VGG(nn.Module):
         """
         super().__init__()
 
-        self.model: VGG = self._load_model(model_name, weights)
-        self.model_name = model_name
+        self.model: VGG = self._load_model(name, weights)
+        self.model_name = name
 
         in_features = self.model.classifier[6].in_features
         self.model.classifier[6] = nn.Linear(in_features, num_class)
 
-        self.model_mapping = {
-            "vgg11": vgg11,
-            "vgg11_bn": vgg11_bn, 
-            "vgg13": vgg13,
-            "vgg13_bn": vgg13_bn,
-            "vgg16": vgg16,
-            "vgg16_bn": vgg16_bn,
-            "vgg19": vgg19,
-            "vgg19_bn": vgg19_bn
-        }
+        self.
 
     def forward(self, x):
         return self.model(x)
@@ -62,10 +62,10 @@ class VGG(nn.Module):
         """
 
         
-        if model_name not in self.model_mapping:
+        if model_name not in model_mapping:
             raise ValueError(f"Unknown model name: {model_name}. Available: {list(self.model_mapping.keys())}")
 
-        model: VGG = self.model_mapping[model_name](weights="DEFAULT" if weights else None)
+        model: VGG = model_mapping[model_name](weights="DEFAULT" if weights else None)
         
         # Замарозка весов
         if weights:
