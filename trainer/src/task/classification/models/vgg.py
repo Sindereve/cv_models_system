@@ -37,8 +37,6 @@ class VGG(nn.Module):
         in_features = self.model.classifier[6].in_features
         self.model.classifier[6] = nn.Linear(in_features, num_class)
 
-        self.
-
     def forward(self, x):
         return self.model(x)
     
