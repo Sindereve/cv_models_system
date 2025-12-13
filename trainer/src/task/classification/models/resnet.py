@@ -1,13 +1,23 @@
 from torch import nn
 from .registry import register
-from torchvision.models import *
+from torchvision.models import (
+    resnet18, resnet34, resnet50, resnet101, resnet152,
+    resnext50_32x4d, resnext101_32x8d, resnext101_64x4d,
+    wide_resnet50_2, wide_resnet101_2,
+    ResNet as TorchvisionResNet
+)
 
 model_mapping = {
     "resnet18": resnet18,
-    "resnet34": resnet34, 
+    "resnet34": resnet34,
     "resnet50": resnet50,
     "resnet101": resnet101,
-    "resnet152": resnet152
+    "resnet152": resnet152,
+    "resnext50_32x4d": resnext50_32x4d,
+    "resnext101_32x8d": resnext101_32x8d,
+    "resnext101_64x4d": resnext101_64x4d,
+    "wide_resnet50_2": wide_resnet50_2, 
+    "wide_resnet101_2": wide_resnet101_2
 }
 
 @register("resnet")
@@ -19,15 +29,16 @@ class ResNet(nn.Module):
             weights: bool = False,
         ):
         """
-        Загрузка одной из моделей ResNet
-
-        Params: 
-            num_classes: количество классов
-            model_name: имя модели ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152']
-            weights: если True - загружает веса
+        Model ResNet
+        
+        :param num_class: Number of output classes.
+        :type num_class: int
+        :param name: Name of the ResNet model to load.
+        :type name: str
+        :param weights: Whether to load pretrained weights.
+        :type weights: bool
         """
         super().__init__()
-
 
         self.model = self._load_model(name, weights)
         self.model_name = name
@@ -48,19 +59,23 @@ class ResNet(nn.Module):
             self,
             model_name: str,
             weights: bool
-        ) -> ResNet:
+        ) -> TorchvisionResNet:
         """
-        Загрузка модели ResNet с опциональными предобученными весами.
-
-        Params:
-            model_name: имя модели
-            weights: загруженная модель будет с весами
+        Load model ResNet white torchvision
+        
+        :param model_name: Name of the ResNet model to load.
+        :type model_name: str
+        :param weights: Whether to load pretrained weights.
+        :type weights: bool
+        
+        :return: Instantiated ResNet model.
+        :rtype: TorchvisionResNet
         """
         
         if model_name not in model_mapping:
-            raise ValueError(f"Unknown model name: {model_name}. Available: {list(self.model_mapping.keys())}")
+            raise ValueError(f"Unknown model name: {model_name}. Available: {list(model_mapping.keys())}")
 
-        model: ResNet = model_mapping[model_name](weights="DEFAULT" if weights else None)
+        model: TorchvisionResNet = model_mapping[model_name](weights="DEFAULT" if weights else None)
         
         # Заморозка весов
         if weights:
