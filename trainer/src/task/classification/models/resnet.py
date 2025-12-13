@@ -51,7 +51,7 @@ class ResNet(nn.Module):
     
     def get_name_model(self):
         """
-        Получаем имя модели
+        Get model name
         """
         return self.model_name
     

@@ -1,6 +1,10 @@
 from torch import nn
 from .registry import register
-from torchvision.models import *
+from torchvision.models import (
+    vgg11, vgg11_bn, vgg13, vgg13_bn,
+    vgg16, vgg16_bn, vgg19, vgg19_bn,
+    VGG as TorchvisionVGG
+)
 
 model_mapping = {
     "vgg11": vgg11,
@@ -22,12 +26,14 @@ class VGG(nn.Module):
             weights: bool = False,
         ):
         """
-        Загрузка одной из моделей VGG
-
-        Params: 
-            num_classes: количество классов
-            model_name: имя модели ['vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn', 'vgg19', 'vgg19_bn']
-            weights: если True - загружает веса
+        Model VGG
+        
+        :param num_class: Number of output classes.
+        :type num_class: int
+        :param name: Name of the VGG model to load.
+        :type name: str
+        :param weights: Whether to load pretrained weights.
+        :type weights: bool
         """
         super().__init__()
 
@@ -42,7 +48,7 @@ class VGG(nn.Module):
     
     def get_name_model(self):
         """
-        Получаем имя модели
+        Get model name
         """
         return self.model_name
     
@@ -50,20 +56,23 @@ class VGG(nn.Module):
             self,
             model_name: str,
             weights: bool
-        ) -> VGG:
+        ) -> TorchvisionVGG:
         """
-        Загрузка модели VGG с опциональными предобученными весами.
-
-        Params:
-            model_name: имя модели
-            weights: загруженная модель будет с весами
+        Load model VGG white torchvision
+        
+        :param model_name: Name of the VGG model to load.
+        :type model_name: str
+        :param weights: Whether to load pretrained weights.
+        :type weights: bool
+        
+        :return: Instantiated VGG model.
+        :rtype: TorchvisionVGG
         """
-
         
         if model_name not in model_mapping:
-            raise ValueError(f"Unknown model name: {model_name}. Available: {list(self.model_mapping.keys())}")
+            raise ValueError(f"Unknown model name: {model_name}. Available: {list(model_mapping.keys())}")
 
-        model: VGG = model_mapping[model_name](weights="DEFAULT" if weights else None)
+        model: TorchvisionVGG = model_mapping[model_name](weights="DEFAULT" if weights else None)
         
         # Замарозка весов
         if weights:
