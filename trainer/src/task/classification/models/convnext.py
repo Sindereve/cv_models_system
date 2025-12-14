@@ -48,6 +48,14 @@ class ConvNeXt(nn.Module):
         """
         return self.model_name
     
+    def get_input_size_for_weights(self) -> tuple[int, int]:
+        if self.name in ["convnext_tiny", "convnext_small", "convnext_base"]:
+            return (224, 224)
+        elif self.name in ["convnext_large"]:
+            return (384, 384)
+        else:
+            return (224, 224)
+    
     def _load_model(
             self,
             model_name: str,

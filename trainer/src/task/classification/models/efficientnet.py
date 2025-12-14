@@ -22,6 +22,17 @@ model_mapping = {
     "efficientnet_v2_l": efficientnet_v2_l
 }
 
+EFFICIENTNET_SIZES = {
+    "efficientnet_b0": (224, 224),
+    "efficientnet_b1": (240, 240),
+    "efficientnet_b2": (260, 260),
+    "efficientnet_b3": (300, 300),
+    "efficientnet_b4": (380, 380),
+    "efficientnet_b5": (456, 456),
+    "efficientnet_b6": (528, 528),
+    "efficientnet_b7": (600, 600),
+}
+
 @register("efficientnet")
 class EfficientNet(nn.Module):
     def __init__(
@@ -56,6 +67,9 @@ class EfficientNet(nn.Module):
         Get model name
         """
         return self.model_name
+    
+    def get_input_size_for_weights(self) -> tuple[int, int]:
+        return EFFICIENTNET_SIZES.get(self.name, (224, 224))
     
     def _load_model(
             self,

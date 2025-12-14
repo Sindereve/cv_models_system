@@ -52,6 +52,9 @@ class VGG(nn.Module):
         """
         return self.model_name
     
+    def get_input_size_for_weights(self) -> tuple[int, int]:
+        return (224, 224)
+    
     def _load_model(
             self,
             model_name: str,
