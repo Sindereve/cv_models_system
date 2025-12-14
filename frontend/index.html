@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Training Interface</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Шапка -->
+        <div class="header">
+            <h1>🚗 Car Classification Training</h1>
+            <div class="status-badge" id="systemStatus">Загрузка...</div>
+        </div>
+
+        <!-- Основной контент -->
+        <div class="main-content">
+            <!-- Левая колонка: Форма обучения -->
+            <div class="left-column">
+                <div class="card">
+                    <h2>⚙️ Конфигурация обучения</h2>
+                    <form id="trainingForm">
+                        
+                        <!-- Секция 1: Data Loader Parameters -->
+                        <div class="form-section">
+                            <h3>📁 Параметры данных</h3>
+                            
+                            <div class="form-group">
+                                <label>Загрузить датасет (ZIP):</label>
+                                <div class="file-upload-area" id="fileUploadArea">
+                                    <div class="file-upload-placeholder">
+                                        <div class="upload-icon">📦</div>
+                                        <div class="upload-text">
+                                            <strong>Перетащите ZIP файл сюда</strong>
+                                            <span>или нажмите для выбора файла</span>
+                                        </div>
+                                    </div>
+                                    <input type="file" id="dataset_file" accept=".zip,.tar,.gz" style="display: none;">
+                                </div>
+                                <div class="file-info" id="fileInfo" style="display: none;">
+                                    <div class="file-details">
+                                        <span class="file-name" id="fileName"></span>
+                                        <span class="file-size" id="fileSize"></span>
+                                        <button type="button" class="btn-remove" onclick="removeFile()">×</button>
+                                    </div>
+                                    <div class="upload-progress" id="uploadProgress" style="display: none;">
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                                        </div>
+                                        <span class="progress-text" id="progressText">0%</span>
+                                    </div>
+                                </div>
+                                <div class="help-text">Поддерживаемые форматы: ZIP, TAR, GZ. Максимальный размер: 2GB</div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Ширина изображения:</label>
+                                    <input type="number" id="img_w_size" value="1080" min="32">
+                                </div>
+                                <div class="form-group">
+                                    <label>Высота изображения:</label>
+                                    <input type="number" id="img_h_size" value="720" min="32">
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Размер батча:</label>
+                                    <input type="number" id="batch_size" value="32" min="1">
+                                </div>
+                                <div class="form-group">
+                                    <label>Всего изображений (0=всё что есть):</label>
+                                    <input type="number" id="total_img" value="0" min="0">
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Доля тренировочных данных:</label>
+                                    <input type="number" id="train_ratio" step="0.01" value="0.75" min="0" max="1">
+                                    <div class="help-text">(0.01 = 1%)</div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Доля валидационных данных:</label>
+                                    <input type="number" id="val_ratio" step="0.01" value="0.15" min="0" max="1">
+                                    <div class="help-text">(0.01 = 1%)</div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="is_calculate_normalize_dataset">
+                                    <span class="checkbox-custom"></span>
+                                    Рассчитать нормализацию датасета
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Секция 2: Trainer Parameters -->
+                        <div class="form-section">
+                            <h3>🏋️ Параметры обучения</h3>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Функция потерь:</label>
+                                    <select id="loss_fn">
+                                        <option value="CrossEntropyLoss">Cross Entropy Loss</option>
+                                        <option value="MSELoss">MSE Loss</option>
+                                        <option value="BCELoss">Binary Cross Entropy</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Оптимизатор:</label>
+                                    <select id="optimizer">
+                                        <option value="Adam">Adam</option>
+                                        <option value="SGD">SGD</option>
+                                        <option value="RMSprop">RMSprop</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Изменение скорости схождения:</label>
+                                    <select id="scheduler">
+                                        <option value="StepLR">StepLR</option>
+                                        <option value="ReduceLROnPlateau">ReduceLROnPlateau</option>
+                                        <option value="CosineAnnealingLR">CosineAnnealingLR</option>
+                                        <option value="None">None</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Device:</label>
+                                    <select id="device">
+                                        <option value="cuda">CUDA (GPU)</option>
+                                        <option value="cpu">CPU</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Эпохи:</label>
+                                <input type="number" id="epochs" value="20" min="1">
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Experiment Name:</label>
+                                    <input type="text" id="experiment_name" 
+                                           value="Search_best_arch" 
+                                           placeholder="Название эксперимента">
+                                </div>
+                                <div class="form-group">
+                                    <label>Run Name:</label>
+                                    <input type="text" id="run_name" 
+                                           placeholder="(оставьте пустым и система сама даст название)">
+                                </div>
+                            </div>
+                            
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="log_mlflow" checked>
+                                    <span class="checkbox-custom"></span>
+                                    Логировать в MLflow
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="log_artifacts" checked>
+                                    <span class="checkbox-custom"></span>
+                                    Сохранять артефакты
+                                </label>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>MLflow URI:</label>
+                                <input type="text" id="mlflow_uri" 
+                                       value="http://127.0.0.1:5000" 
+                                       placeholder="http://127.0.0.1:5000">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>MLflow Tags (JSON):</label>
+                                <textarea id="mlflow_tags" rows="3" 
+                                          placeholder='{"project": "car_classification", "dataset": "cars"}'>
+                                </textarea>
+                                <div class="help-text">Дополнительные теги в формате JSON</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Секция 3: Model Parameters -->
+                        <div class="form-section">
+                            <h3>🧠 Параметры модели</h3>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Тип модели:</label>
+                                    <select id="model_type">
+                                        <option value="ResNet">ResNet</option>
+                                        <option value="CustomCNN">VGG</option>
+                                        <option value="EfficientNet">EfficientNet</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Имя модели:</label>
+                                    <select id="model_name">
+                                        <option value="resnet18">ResNet18</option>
+                                        <option value="resnet34">ResNet34</option>
+                                        <option value="resnet50">ResNet50</option>
+                                        <option value="efficientnet_b0">EfficientNet-B0</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="model_weights" checked>
+                                    <span class="checkbox-custom"></span>
+                                    Использовать предобученные веса
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn-primary" id="startTrainingBtn">
+                            🚀 Запустить обучение
+                        </button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Правая колонка: Статус и логи -->
+            <div class="right-column">
+                <div class="card">
+                    <h2>📊 Статус обучения</h2>
+                    <div id="trainingStatus">
+                        <div class="empty-state">
+                            Нет активных обучений
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2>📝 Логи</h2>
+                    <div class="logs-container" id="trainingLogs">
+                        <div class="log-entry info">Готов к запуску обучения...</div>
+                    </div>
+                    
+                    <div class="controls">
+                        <button onclick="refreshStatus()" class="btn-secondary">
+                            🔄 Обновить статус
+                        </button>
+                        <button onclick="clearLogs()" class="btn-secondary">
+                            🧹 Очистить логи
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Статус бар -->
+        <div class="status-bar">
+            <div class="status-item">
+                <span>BFF API:</span>
+                <span id="apiStatus" class="status-text">Не подключен</span>
+            </div>
+            <div class="status-item">
+                <span>MLflow:</span>
+                <span id="mlflowStatus" class="status-text">Не подключен</span>
+            </div>
+            <div class="status-item">
+                <span id="lastUpdate">Загрузка...</span>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
