@@ -1,5 +1,5 @@
 from torch import nn
-from . import vgg, resnet 
+from . import vgg, resnet, efficientnet, convnext
 from .registry import REGISTRY
 
 from shared.logging import get_logger
