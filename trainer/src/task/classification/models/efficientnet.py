@@ -69,7 +69,7 @@ class EfficientNet(nn.Module):
         return self.model_name
     
     def get_input_size_for_weights(self) -> tuple[int, int]:
-        return EFFICIENTNET_SIZES.get(self.name, (224, 224))
+        return EFFICIENTNET_SIZES.get(self.model_name, (224, 224))
     
     def _load_model(
             self,
