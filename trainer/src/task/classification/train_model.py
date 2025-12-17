@@ -43,6 +43,7 @@ class Trainer:
             log_mlflow: bool = True,
             mlflow_uri: str = 'http://127.0.0.1:5000',
             log_artifacts: bool = True,
+            log_checkpoint: bool = True,
             experiment_name: str = "Experiment_name",
             run_name : Optional[str] = None,
             mlflow_tags: Optional[Dict[str, str]] = None,
@@ -66,6 +67,7 @@ class Trainer:
             log_mlflow: Флаг логирования в MLflow
             mlflow_uri: URI MLflow tracking server (локальный или удаленный, !! HTTP !!)
             log_artifacts: Флаг логирование артефактов
+            log_checkpoint: Флаг для сохранения чекпоинтов модели
             experiment_name: Имя эксперимента в MLflow(По умолчанию: "Experiment_name")
             run_name: Уникальное имя запуска в MLflow(По умолчанию имя задаётся вида 
                 "{имя_модели}_{кол_эпох}_{скорость_схождения}_{Время}". Пример: "VGG_11_ep20_lr0.001_time(11:12_19:53:16)")
@@ -94,6 +96,7 @@ class Trainer:
         self.log_mlflow = log_mlflow
         self.mlflow_uri = mlflow_uri
         self.log_artifacts = log_artifacts
+        self.log_checkpoint = log_checkpoint
         self.experiment_name = experiment_name
         self.run_name = run_name
         self.mlflow_tags = mlflow_tags
@@ -554,23 +557,25 @@ class Trainer:
         Логирование чекпоинта
         """ 
         try:
-            self.logger.debug(f"|🔘 Start save checkpoint(save_model)")
-            name = f"checkpoint_epoch_{epoch}"
-            import copy 
-            model_cpu = copy.deepcopy(self.model).to('cpu')
-            model_cpu.eval()
+            if self.log_checkpoint or epoch == self.epochs:
+                self.logger.debug(f"|🔘 Start save checkpoint(save_model)")
+                name = f"checkpoint_epoch_{epoch}"
+                import copy 
+                model_cpu = copy.deepcopy(self.model).to('cpu')
+                model_cpu.eval()
 
-            mlflow.pytorch.log_model(
-                model_cpu,
-                name=name,
-                step=epoch,
-                signature=self._create_mlflow_signature(model_cpu),
-                await_registration_for=0
-            )
-            
-            del model_cpu
-            self.logger.debug(f"|🟢 Checkpoint(save_model)")
-            
+                mlflow.pytorch.log_model(
+                    model_cpu,
+                    name=name,
+                    step=epoch,
+                    signature=self._create_mlflow_signature(model_cpu),
+                    await_registration_for=0
+                )
+                
+                del model_cpu
+                self.logger.debug(f"|🟢 Checkpoint(save_model)")
+            else:
+                self.logger.debug(f"|🟢 Checkpoint(skip)")
         except Exception as e:
             self.logger.error(f"🔴 Error logging сheckpoint: {e}")
 
