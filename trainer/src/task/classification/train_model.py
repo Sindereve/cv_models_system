@@ -18,7 +18,6 @@ from torchmetrics.classification import (
 from torchmetrics import MeanMetric
 
 import asyncio
-from functools import partial
 import time
 from typing import Optional, Dict
 
@@ -35,7 +34,7 @@ class Trainer:
             classes: Optional[Dict] = None,
             # settings for train model
             loss_fn: Optional[nn.Module] = None,
-            optimizer: Optional[Optimizer] = None,
+            optimizer_config: Dict = None,
             scheduler: Optional[lr_scheduler._LRScheduler] = None,
             epochs: int = 10,
             device: Optional[torch.device] = None,
@@ -59,7 +58,7 @@ class Trainer:
             test_loader: Данные для тестирования
             classes: Классы в данных(словарь[значение: индекс класса])
             loss_fn: Функция потерь
-            optimizer: Оптимизатор
+            optimizer_config: Конфигурация оптимизатора
             scheduler: Планировщик learning rate
             epochs: Количество эпох при обучении
             device: Устройство вычислений GPU\\CPU
@@ -81,7 +80,8 @@ class Trainer:
         # model and setting learning
         self.model = model
         self.loss_fn = loss_fn 
-        self.optimizer = optimizer 
+        self.optimizer_config = optimizer_config 
+        self.optimizer = None
         self.scheduler = scheduler
         self.epochs = epochs
         self.device = device
@@ -193,11 +193,12 @@ class Trainer:
                 self.logger.debug(f"|├🟢 {name}: OK")
 
         # optimizer
-        if not isinstance(self.optimizer, Optimizer):
-            self.logger.warning(f"🟠 optimizer is not {Optimizer}. Change in default value({optim.Adam})")
+        if not isinstance(self.optimizer_config, Dict):
+            self.logger.warning(f"🟠 optimizer_config is not {Dict}. Change in default value({optim.Adam})")
             self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
             self.logger.debug(f"|├🟢 optimizer change in default value. (learning_rate = 0.001, {optim.Adam})")
         else:
+            self.optimizer = self._create_optimizer_from_config(self.optimizer_config)
             self.logger.debug(f"|├🟢 optimizer: OK")
 
         # lr_scheduler
@@ -212,6 +213,39 @@ class Trainer:
         self._mlflow_test_connect()
 
         self.logger.debug("|└🏁 finish validating params")
+
+    def _create_optimizer_from_config(self, optimizer_config: Dict) -> Optimizer:
+        """
+        Создает оптимизатор из конфигурационного словаря
+        
+        Поддерживаемый формат:
+            {'type': 'AdamW', 'params': {'lr': 0.001, 'weight_decay': 1e-4}}
+        
+        Где 'params' содержит все параметры оптимизатора для передачи в конструктор.
+        """
+        optimizer_type = optimizer_config.get('type', 'AdamW')
+        
+        if not hasattr(optim, optimizer_type):
+            raise ValueError(f"Optimizer {optimizer_type} is not found in torch.optim")
+        
+        if 'params' not in optimizer_config:
+            raise ValueError("Config must contain 'params' key with optimizer parameters")
+        
+        optimizer_params = optimizer_config['params']
+        
+        if not isinstance(optimizer_params, dict):
+            raise ValueError("'params' must be a dictionary with optimizer parameters")
+
+        if not hasattr(self.model, 'parameters'):
+            raise ValueError("Model has no method 'parameters' for optimizer")
+        
+        optimizer_class = getattr(optim, optimizer_type)
+        optimizer = optimizer_class(self.model.parameters(), **optimizer_params)
+        
+        self.logger.debug(f"|├ Optimizer {optimizer_type} created with params: {optimizer_params}")
+        self.logger.debug(f"|├🟢 optimizer: OK")
+        return optimizer
+
 
     def _setup_device(self, device: Optional[torch.device] = None):
         """
