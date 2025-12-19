@@ -35,7 +35,7 @@ class Trainer:
             # settings for train model
             loss_fn: Optional[nn.Module] = None,
             optimizer_config: Dict = None,
-            scheduler: Optional[lr_scheduler._LRScheduler] = None,
+            scheduler_config: Dict = None,
             epochs: int = 10,
             device: Optional[torch.device] = None,
             # mlflow tracking
@@ -82,7 +82,8 @@ class Trainer:
         self.loss_fn = loss_fn 
         self.optimizer_config = optimizer_config 
         self.optimizer = None
-        self.scheduler = scheduler
+        self.scheduler_config = scheduler_config
+        self.scheduler = None
         self.epochs = epochs
         self.device = device
 
@@ -202,11 +203,12 @@ class Trainer:
             self.logger.debug(f"|├🟢 optimizer: OK")
 
         # lr_scheduler
-        if not isinstance(self.scheduler, lr_scheduler._LRScheduler):
-            self.logger.warning(f"🟠 scheduler is not {lr_scheduler._LRScheduler}. Change in default value({lr_scheduler.CosineAnnealingLR})")
+        if not isinstance(self.scheduler_config, Dict):
+            self.logger.warning(f"🟠 scheduler is not {Dict}. Change in default value({lr_scheduler.CosineAnnealingLR})")
             self.scheduler = lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=50)
             self.logger.debug(f"|├🟢 scheduler change in default value. ({lr_scheduler.CosineAnnealingLR})")
         else:
+            self.scheduler = self._create_scheduler_from_config(self.scheduler_config)
             self.logger.debug(f"|├🟢 scheduler: OK")
 
         # mlflow test connect
@@ -243,9 +245,40 @@ class Trainer:
         optimizer = optimizer_class(self.model.parameters(), **optimizer_params)
         
         self.logger.debug(f"|├ Optimizer {optimizer_type} created with params: {optimizer_params}")
-        self.logger.debug(f"|├🟢 optimizer: OK")
         return optimizer
 
+    def _create_scheduler_from_config(self, scheduler_config: Dict) -> Optional[lr_scheduler._LRScheduler]:
+        """
+        Создает scheduler из конфигурационного словаря
+        
+        Поддерживаемый формат:
+            {'type': 'StepLR', 'params': {'step_size': 30, 'gamma': 0.1}}
+        
+        Где 'params' содержит все параметры scheduler для передачи в конструктор.
+        """
+        if scheduler_config is None:
+            return None
+        
+        scheduler_type = scheduler_config.get('type')
+        if not scheduler_type:
+            raise ValueError("Scheduler config must contain 'type' key")
+        
+        if not hasattr(lr_scheduler, scheduler_type):
+            raise ValueError(f"Scheduler {scheduler_type} is not found in torch.optim.lr_scheduler")
+        
+        if 'params' not in scheduler_config:
+            raise ValueError("Scheduler config must contain 'params' key")
+        
+        scheduler_params = scheduler_config['params']
+        
+        if not isinstance(scheduler_params, dict):
+            raise ValueError("Scheduler 'params' must be a dictionary")
+        
+        scheduler_class = getattr(lr_scheduler, scheduler_type)
+        scheduler = scheduler_class(self.optimizer, **scheduler_params)
+        
+        self.logger.debug(f"|├ Scheduler {scheduler_type} created with params: {scheduler_params}")
+        return scheduler
 
     def _setup_device(self, device: Optional[torch.device] = None):
         """
@@ -591,7 +624,7 @@ class Trainer:
         Логирование чекпоинта
         """ 
         try:
-            if self.log_checkpoint or epoch == self.epochs:
+            if self.log_checkpoint or (epoch == self.epochs and self.log_artifacts):
                 self.logger.debug(f"|🔘 Start save checkpoint(save_model)")
                 name = f"checkpoint_epoch_{epoch}"
                 import copy 
