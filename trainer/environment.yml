@@ -1,0 +1,34 @@
+name: cv-trainer
+channels:
+  - conda-forge
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  
+  # PyTorch для Linux
+  - pytorch
+  - torchvision
+  - torchaudio
+  - torchmetrics
+  
+  # Основные ML пакеты
+  - numpy
+  - pandas
+  - scikit-learn
+  - matplotlib
+  - pillow
+  - opencv
+  
+  # Через pip (для FastAPI и др.)
+  - pip:
+    - fastapi
+    - uvicorn[standard]
+    - pydantic
+    - redis
+    - psutil
+    - mlflow
+    - tqdm
+    - python-dotenv
+    - loguru
