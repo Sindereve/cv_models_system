@@ -1,9 +1,20 @@
-# мусор 
+# trash
 .venv
 .vs
 __pycache__
+
+# data
+datasets
+
+# mlflow
+mlflow
+mlflow_data
 mlruns
 mlartifacts
+mlflow.db
+
+# redice
+redice_data
 
 # trainer service
 trainer/src/data
