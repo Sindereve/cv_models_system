@@ -359,7 +359,8 @@ class Trainer:
             _ = mlflow.search_experiments()
             self.logger.debug(f"||├🟢 Connected to MLflow at {self.mlflow_uri}")
         except Exception as e:
-            self.logger.error(f"||└🔴MLflow server at {self.mlflow_uri} not available. Using local tracking.")
+            self.logger.error(f"|||🔴MLflowe{e}")
+            self.logger.warning(f"||└🟠MLflow server at {self.mlflow_uri} not available. Using local tracking.")
             mlflow.set_tracking_uri(None)
 
     @contextmanager
