@@ -33,7 +33,7 @@ class Trainer:
             test_loader: DataLoader = None,
             classes: Optional[Dict] = None,
             # settings for train model
-            loss_fn: Optional[nn.Module] = None,
+            loss_fn_config: Dict = None,
             optimizer_config: Dict = None,
             scheduler_config: Dict = None,
             epochs: int = 10,
@@ -57,9 +57,9 @@ class Trainer:
             val_loader: Данные для валидации
             test_loader: Данные для тестирования
             classes: Классы в данных(словарь[значение: индекс класса])
-            loss_fn: Функция потерь
+            loss_fn_config: Конфигурация функции потерь
             optimizer_config: Конфигурация оптимизатора
-            scheduler: Планировщик learning rate
+            scheduler_config: Конфигурация планировщика learning rate
             epochs: Количество эпох при обучении
             device: Устройство вычислений GPU\\CPU
 
@@ -79,7 +79,8 @@ class Trainer:
 
         # model and setting learning
         self.model = model
-        self.loss_fn = loss_fn 
+        self.loss_fn_config = loss_fn_config
+        self.loss_fn = None
         self.optimizer_config = optimizer_config 
         self.optimizer = None
         self.scheduler_config = scheduler_config
@@ -181,7 +182,6 @@ class Trainer:
 
         check_and_adjust = [
             (self.test_loader, DataLoader, "test_loader", None),
-            (self.loss_fn, nn.Module, "loss_fn", nn.CrossEntropyLoss()),
             (self.device, torch.device, "device", None),
         ]
 
@@ -192,6 +192,15 @@ class Trainer:
                 self.logger.debug(f"|├🟢 {name} change in default value. ({new_val})")
             else:
                 self.logger.debug(f"|├🟢 {name}: OK")
+
+        # loss function
+        if not isinstance(self.loss_fn_config, Dict):
+            self.logger.warning(f"🟠 loss_fn_config is not {Dict}. Change in default value({nn.CrossEntropyLoss})")
+            self.loss_fn = nn.CrossEntropyLoss()
+            self.logger.debug(f"|├🟢 loss_fn change in default value. ({nn.CrossEntropyLoss})")
+        else:
+            self.loss_fn = self._create_loss_fn_from_config(self.loss_fn_config)
+            self.logger.debug(f"|├🟢 loss_fn: OK")
 
         # optimizer
         if not isinstance(self.optimizer_config, Dict):
@@ -215,6 +224,37 @@ class Trainer:
         self._mlflow_test_connect()
 
         self.logger.debug("|└🏁 finish validating params")
+
+    def _create_loss_fn_from_config(self, loss_fn_config: Dict) -> nn.Module:
+        """
+        Создает функцию потерь из конфигурационного словаря
+
+        Поддерживаемый формат:
+            {'type': 'CrossEntropyLoss', 'params': {'label_smoothing': 0.1}}
+        
+        Где 'params' содержит все параметры функции потерь для передачи в конструктор.
+        """
+        loss_fn_type = loss_fn_config.get('type', 'CrossEntropyLoss')
+        
+        if not hasattr(nn, loss_fn_type):
+            raise ValueError(f"Loss function {loss_fn_type} is not found in torch.nn")
+        
+        if 'params' not in loss_fn_config:
+            raise ValueError("Config must contain 'params' key with optimizer parameters")
+        
+        loss_fn_params = loss_fn_config['params']
+        
+        if not isinstance(loss_fn_params, dict):
+            raise ValueError("'params' must be a dictionary with optimizer parameters")
+
+        if not hasattr(self.model, 'parameters'):
+            raise ValueError("Model has no method 'parameters' for optimizer")
+        
+        loss_fn_class = getattr(nn, loss_fn_type)
+        loss_fn = loss_fn_class(**loss_fn_params)
+        
+        self.logger.debug(f"|├ Loss function {loss_fn_type} created with params: {loss_fn_params}")
+        return loss_fn
 
     def _create_optimizer_from_config(self, optimizer_config: Dict) -> Optimizer:
         """
