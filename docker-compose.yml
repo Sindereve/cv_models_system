@@ -29,24 +29,22 @@ services:
       --allowed-hosts "*"
     restart: unless-stopped
 
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: cv_frontend
-  #   ports:
-  #     - "8000:8000"
-  #   environment:
-  #     - REDIS_HOST=redis
-  #     - REDIS_PORT=6379
-  #     - MLFLOW_TRACKING_URI=http://mlflow:5000
-  #   volumes:
-  #     - ./shared:/app/shared
-  #   depends_on:
-  #     - redis
-  #     - mlflow
-    
-  #   restart: unless-stopped
+  backend:
+    build: ./backend
+    container_name: cv_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - ./datasets:/app/datasets
+      - ./shared:/app/src/shared
+    depends_on:
+      - redis
+      - mlflow
+    restart: unless-stopped
 
   trainer:
     build: ./trainer
@@ -55,7 +53,8 @@ services:
     ports:
       - "311:311"
     volumes:
-      - ./datasets:/app/data
+      - ./datasets:/app/datasets
+      - ./shared:/app/src/shared
     depends_on:
       - redis
       - mlflow
@@ -66,6 +65,15 @@ services:
         max-size: "10m"
         max-file: "3"
         mode: "non-blocking"
+    
+  frontend:
+    build: ./frontend
+    container_name: cv_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
     
 
 volumes:

@@ -70,7 +70,7 @@ class TrainerParams(BaseModel):
         default_factory=OptimizerConfig,
         description="Конфигурация оптимизатора"
     )
-    scheduler_config: SchedulerConfig = Field(
+    scheduler_config: Optional[SchedulerConfig] = Field(
         default_factory=SchedulerConfig,
         description="Конфигурация планировщика"
     )

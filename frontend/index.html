@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ML Training Interface</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/style.css">
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 </head>
 <body>
@@ -127,6 +127,7 @@
                                 <div class="form-group">
                                     <label>Изменение скорости схождения:</label>
                                     <select id="scheduler">
+                                        <option value="">— по умолчанию —</option>
                                         <option value="StepLR">StepLR</option>
                                         <option value="ReduceLROnPlateau">ReduceLROnPlateau</option>
                                         <option value="CosineAnnealingLR">CosineAnnealingLR</option>
@@ -136,6 +137,7 @@
                                 <div class="form-group">
                                     <label>Device:</label>
                                     <select id="device">
+                                        <option value="">— автоматически —</option>
                                         <option value="cuda">CUDA (GPU)</option>
                                         <option value="cpu">CPU</option>
                                     </select>
@@ -174,19 +176,13 @@
                                 </label>
                             </div>
                             
-                            <div class="form-group">
-                                <label>MLflow URI:</label>
-                                <input type="text" id="mlflow_uri" 
-                                       value="http://127.0.0.1:5000" 
-                                       placeholder="http://127.0.0.1:5000">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>MLflow Tags (JSON):</label>
-                                <textarea id="mlflow_tags" rows="3" 
-                                          placeholder='{"project": "car_classification", "dataset": "cars"}'>
-                                </textarea>
-                                <div class="help-text">Дополнительные теги в формате JSON</div>
+                            <div class="form-group mlflow-check">
+                                <label for="mlflow_uri">MLflow URI:</label>
+                                <div class="mlflow-input-group">
+                                    <input type="text" id="mlflow_uri" placeholder="http://mlflow:5000" />
+                                    <button type="button" id="checkMlflowBtn">Проверить</button>
+                                </div>
+                                <span id="mlflowStatus" class="status-text">Не подключен</span>
                             </div>
                         </div>
                         
@@ -235,9 +231,7 @@
                 <div class="card">
                     <h2>📊 Статус обучения</h2>
                     <div id="trainingStatus">
-                        <div class="empty-state">
-                            Нет активных обучений
-                        </div>
+                        <!-- Тут будем динамически вставлять задачи -->
                     </div>
                 </div>
                 
@@ -262,12 +256,16 @@
         <!-- Статус бар -->
         <div class="status-bar">
             <div class="status-item">
+                <span>Frontend:</span>
+                <span id="frontendStatus" class="status-text healthy">✓ Работает</span>
+            </div>
+            <div class="status-item">
                 <span>BFF API:</span>
                 <span id="apiStatus" class="status-text">Не подключен</span>
             </div>
             <div class="status-item">
-                <span>MLflow:</span>
-                <span id="mlflowStatus" class="status-text">Не подключен</span>
+                <span>Redis:</span>
+                <span id="redisStatus" class="status-text">Не подключен</span>
             </div>
             <div class="status-item">
                 <span id="lastUpdate">Загрузка...</span>
@@ -275,6 +273,6 @@
         </div>
     </div>
     
-    <script src="app.js"></script>
+    <script src="/app.js"></script>
 </body>
 </html>

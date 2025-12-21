@@ -68,31 +68,26 @@ body {
     min-width: 0; /* Для правильного сжатия */
 }
 
+/* Контейнер правой колонки */
 .right-column {
     flex: 1;
     min-width: 400px; /* Минимальная ширина правой колонки */
     display: flex;
     flex-direction: column;
-    gap: 30px;
+    gap: 20px; /* Меньше, чтобы статусы и логи были ближе */
 }
 
 /* Карточки */
-.card {
-    background: rgba(255, 255, 255, 0.07);
+.right-column .card {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding: 20px;
     border-radius: 16px;
-    padding: 30px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    height: 100%;
-}
-
-.card h2 {
-    font-size: 22px;
-    margin-bottom: 25px;
-    color: #00d4ff;
-    font-weight: 600;
-    padding-bottom: 15px;
-    border-bottom: 2px solid rgba(0, 212, 255, 0.2);
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.07);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    flex: 1; /* Позволяет растягиваться */
 }
 
 /* Форма */
@@ -352,11 +347,13 @@ form {
     color: #a0aec0;
 }
 
-.status-text {
-    font-weight: 600;
+.mlflow-check .status-text {
+    margin-top: 4px;
+    font-weight: bold;
+    color: #888;
+    background: rgba(255, 255, 255, 0.1);
     padding: 4px 12px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.1);
 }
 
 /* Empty state */
@@ -613,3 +610,391 @@ form {
     background: rgba(0, 212, 255, 0.2);
     border-color: #00d4ff;
 }
+
+
+
+.task-status-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.task-status-badge.pending {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+    border-left-color: #f39c12;
+}
+
+.task-status-badge.processing {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+    border-left-color: #3498db;
+}
+
+.task-status-badge.completed {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+    border-left-color: #2ecc71;
+}
+
+.task-status-badge.failed {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+    border-left-color: #e74c3c;
+}
+
+.task-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.task-details p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+.task-progress {
+    margin-top: 20px;
+}
+
+.task-progress .progress-bar {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.task-progress .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3498db, #2ecc71);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.task-progress .progress-text {
+    text-align: center;
+    color: #a0aec0;
+    font-size: 12px;
+}
+
+/* Стили для списка задач */
+.tasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.task-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s;
+}
+
+.task-item.active {
+    border-color: #3498db;
+    background: rgba(52, 152, 219, 0.1);
+}
+
+.task-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.task-id {
+    font-family: monospace;
+    color: #00d4ff;
+    font-size: 14px;
+}
+
+.task-item .task-status {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-weight: 600;
+}
+
+.task-item-body {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.task-item-body p {
+    margin: 0;
+    font-size: 13px;
+    color: #a0aec0;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-small:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.btn-small.btn-danger {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: rgba(231, 76, 60, 0.3);
+}
+
+.btn-small.btn-danger:hover {
+    background: rgba(231, 76, 60, 0.3);
+}
+
+/* Модальное окно */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    background: #1a2027;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header {
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: #00d4ff;
+    font-size: 20px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-body pre {
+    margin: 0;
+    color: #cbd5e0;
+    font-size: 13px;
+    line-height: 1.4;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+
+.modal-footer {
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: right;
+}
+
+/* Адаптивные стили */
+@media (max-width: 768px) {
+    .task-details {
+        grid-template-columns: 1fr;
+    }
+    
+    .task-item-body {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 10px;
+    }
+}
+
+/* Статус индикаторы */
+.status-text.healthy {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+.status-text.unhealthy {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+.mlflow-check {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+.mlflow-input-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+#mlflow_uri {
+    flex: 1;
+    padding: 6px 8px;
+}
+
+#checkMlflowBtn {
+    padding: 6px 12px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+#checkMlflowBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(102, 126, 234, 0.4);
+}
+.task-status-badge {
+    padding: 2px 8px;
+    border-radius: 6px;
+    color: #fff;
+    font-weight: bold;
+    font-size: 0.85rem;
+}
+
+.task-status-badge.pending {
+    background-color: gray;
+}
+
+.task-status-badge.processing {
+    background-color: orange;
+}
+
+.task-status-badge.completed {
+    background-color: green;
+}
+
+.task-status-badge.failed {
+    background-color: red;
+}
+
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.task-details p {
+    margin: 2px 0;
+}
+
+/* Контейнер со списком задач */
+#trainingStatus {
+    flex: 1; /* Занимает все доступное место в карточке */
+    overflow-y: auto; /* Скролл при переполнении */
+    padding-right: 5px; /* Скролл не перекрывает контент */
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Меньше отступы между задачами */
+}
+
+
+/* Карточка задачи */
+.task-status-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 10px 12px;
+    border-left: 4px solid;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Заголовок карточки */
+.task-status-card .task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* ID задачи */
+.task-status-card h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #fff;
+}
+
+/* Детали задачи */
+.task-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 4px;
+}
+
+.task-details p {
+    margin: 0;
+    font-size: 12px;
+    color: #cbd5e0;
+}
+
+/* Бейджи статусов */
+.task-status-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    text-transform: uppercase;
+}
+
+/* Цвета бейджей */
+.task-status-badge.pending { background-color: gray; }
+.task-status-badge.processing { background-color: orange; }
+.task-status-badge.completed { background-color: green; }
+.task-status-badge.failed { background-color: red; }

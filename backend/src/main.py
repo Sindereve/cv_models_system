@@ -40,7 +40,7 @@ async def create_training_job(config: TrainingConfig):
     try:
         # Добавляем в очередь заданий
         redis_client.lpush("ml:tasks:pending", json.dumps(task.dict()))
-        logger.info(f"Created training task {task_id}")
+        logger.info(f"Created training task {task_id}\nCONFIG:\n{task.dict()}")
 
         return {
             "status": "ok",
@@ -238,3 +238,67 @@ async def health_check():
                 "error": str(e)
             }
         )
+
+import shutil
+from fastapi import UploadFile, File
+import os
+import shutil
+import zipfile
+import tarfile
+import uuid
+import os
+
+UPLOAD_DIR = "datasets"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@app.post("/upload_dataset")
+async def upload_dataset(dataset: UploadFile = File(...)):
+    try:
+        # 🔑 уникальная папка загрузки
+        upload_id = str(uuid.uuid4())
+        upload_dir = os.path.join(UPLOAD_DIR, upload_id)
+        os.makedirs(upload_dir, exist_ok=True)
+
+        archive_path = os.path.join(upload_dir, dataset.filename)
+        extract_dir = os.path.join(upload_dir, "extracted")
+        os.makedirs(extract_dir, exist_ok=True)
+
+        # сохраняем архив
+        with open(archive_path, "wb") as buffer:
+            shutil.copyfileobj(dataset.file, buffer)
+
+        # распаковываем
+        extract_archive(archive_path, extract_dir)
+        
+        logger.info(
+            f"Dataset uploaded and extracted: {dataset.filename} -> {extract_dir}"
+        )
+
+        return {
+            "status": "ok",
+            "dataset_id": upload_id,
+            "archive": dataset.filename,
+            "path": extract_dir,
+            "message": "Dataset uploaded and extracted successfully"
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except Exception as e:
+        logger.error(f"Error uploading dataset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+def extract_archive(archive_path: str, extract_to: str):
+    if zipfile.is_zipfile(archive_path):
+        with zipfile.ZipFile(archive_path, "r") as zip_ref:
+            zip_ref.extractall(extract_to)
+        return
+
+    if tarfile.is_tarfile(archive_path):
+        with tarfile.open(archive_path, "r:*") as tar_ref:
+            tar_ref.extractall(extract_to)
+        return
+
+    raise ValueError("Unsupported archive format")
