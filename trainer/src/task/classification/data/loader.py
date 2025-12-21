@@ -3,6 +3,9 @@ import torch
 import tqdm
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms, datasets
+from shared.logging import get_logger
+
+logger = get_logger(__name__)
 
 class TransformDataset(torch.utils.data.Dataset):
     def __init__(self, subset, transform=None):
@@ -47,7 +50,7 @@ def load_dataloader(
         Dataloader: Dataloader для тестовых данных
         list[str]: список названий классов
     """
-    print("⚪[load_dataloader_classification] start create dataloaders")
+    logger.info("⚪[load_dataloader_classification] start create dataloaders")
 
     base_transform = transforms.Compose([
         transforms.Resize((img_h_size, img_w_size)),
@@ -112,7 +115,7 @@ def load_dataloader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=0,
         pin_memory=True,
     )
 
@@ -120,7 +123,7 @@ def load_dataloader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,
+        num_workers=0,
         pin_memory=True,
     )
 
@@ -128,15 +131,15 @@ def load_dataloader(
         test_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,
+        num_workers=0,
         pin_memory=True
     )
 
-    print("🟢[load_dataloader_classification] finish create dataloaders")
-    print(f" ➖ Train samples: {train_size}")
-    print(f" ➖ Val samples:   {val_size}")
-    print(f" ➖ Test samples:  {test_size}")
-    print(f" ➖ Classes:       {classes}")
+    logger.info("🟢[load_dataloader_classification] finish create dataloaders")
+    logger.info(f" ➖ Train samples: {train_size}")
+    logger.info(f" ➖ Val samples:   {val_size}")
+    logger.info(f" ➖ Test samples:  {test_size}")
+    logger.info(f" ➖ Classes:       {classes}")
 
     return train_loader, val_loader, test_loader, classes
 
@@ -150,7 +153,7 @@ def calculate_normalize_datasets(
     Args:
         dataloader: весь известный нам датасет
     """
-    print("⚪[calculate_normalize_datasets] start")
+    logger.info("⚪[calculate_normalize_datasets] start")
     channels_sum = torch.zeros(3)
     channels_sq_sum = torch.zeros(3)
     num_batches = 0
@@ -165,7 +168,7 @@ def calculate_normalize_datasets(
     
     mean = channels_sum / num_batches
     std = (channels_sq_sum / num_batches - mean**2)**0.5
-    print("🟢[calculate_normalize_datasets] finish")
+    logger.info("🟢[calculate_normalize_datasets] finish")
     return mean, std
 
 def denormalize_image(
