@@ -10,17 +10,32 @@ logger = get_logger(__name__)
 
 @router.post("/clf")
 async def start_training(request: TrainingConfig):
-    """Проверка работоспособности сервиса"""
-    task_id = str(uuid.uuid4())
+    """
+    Запуск обучения модели классификации изображений
     
-    config = request.model_dump()
-    logger.debug(f"\nCONFIG:\n {config}")
+    :param request: Конфигурации обучения
+    :type request: TrainingConfig
+    """
     
-    training_model_clf(
-        data_loader_params=config['data_loader_params'],
-        model_params=config['model_params'],
-        trainer_params=config['trainer_params']
-    )
+    train_model(request)
 
-    logger.debug(f"Create task(id {task_id})")
-    return {"status": "ok", "message": f"Task register in redis. (Id {task_id})"}
+    return {"status": "ok"}
+
+def train_model(config: TrainingConfig):
+    """
+    Training model
+    
+    :param config: Config
+    :type config: TrainingConfig
+    """
+    try:
+        config = config.model_dump()
+        logger.debug(f"\nCONFIG:\n {config}")
+        training_model_clf(
+            data_loader_params=config['data_loader_params'],
+            model_params=config['model_params'],
+            trainer_params=config['trainer_params']
+        )
+    except Exception as e:
+        logger.error(f"🔴 Error: {e}")
+        raise
