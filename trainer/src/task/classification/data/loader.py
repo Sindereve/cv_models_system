@@ -1,6 +1,7 @@
 from typing import List, Tuple
 import torch
 import tqdm
+import os
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms, datasets
 from shared.logging import get_logger
@@ -32,25 +33,91 @@ def load_dataloader(
         is_calculate_normalize_dataset: bool = False
     ) -> Tuple[DataLoader, DataLoader, DataLoader, List[str]]:
     """
-    Созданиём Dataloader
-
-    Args:
-        path_data_dir: путь к папке с данными
-        img_w_size: ширина изображений после преобразований
-        img_h_size: высота изображений после преобразований
-        total_img: количество изображений, которое нужно
-        batch_size: размер батчей
-        train_ratio: отношение тренировочных данных к всем данным
-        val_ratio: отношение валидационных данных к всем данным
-        is_calculate_normalize_dataset: нужно ли нормализировать наши данные
-
-    Returns:
-        Dataloader: Dataloader для тренировочных данных
-        Dataloader: Dataloader для валидационнх данных
-        Dataloader: Dataloader для тестовых данных
-        list[str]: список названий классов
+    Creates train, validation, and test DataLoaders from image directory.
+    
+    The function loads images from a directory structure where each subdirectory
+    represents a class. Images are resized, optionally normalized, and split into
+    train/validation/test sets according to specified ratios.
+    
+    Parameters
+    ----------
+    path_data_dir : str
+        Path to the directory containing image data. Expected structure:
+        path_data_dir/
+            class1/
+                img1.jpg
+                img2.jpg
+            class2/
+                img1.jpg
+                ...
+    
+    img_w_size : int, default=224
+        Target width for image resizing.
+    
+    img_h_size : int, default=224
+        Target height for image resizing.
+    
+    total_img : int, default=0
+        Total number of images to use. If 0, uses all available images.
+    
+    batch_size : int, default=32
+        Batch size for all DataLoaders.
+    
+    train_ratio : float, default=0.75
+        Proportion of data to use for training. Should be between 0 and 1.
+    
+    val_ratio : float, default=0.15
+        Proportion of data to use for validation. Should be between 0 and 1.
+    
+    is_calculate_normalize_dataset : bool, default=False
+        If True, calculates mean and std for dataset normalization.
+        If False, uses default normalization values.
+    
+    Returns
+    -------
+    Tuple[DataLoader, DataLoader, DataLoader, List[str]]
+        Returns a tuple containing:
+        - train_loader : DataLoader for training data
+        - val_loader : DataLoader for validation data  
+        - test_loader : DataLoader for test data
+        - classes : List of class names (alphabetically sorted)
+    
+    Raises
+    ------
+    ValueError
+        If `train_ratio + val_ratio > 1` or if directory doesn't exist.
+    
+    FileNotFoundError
+        If `path_data_dir` doesn't exist or contains no images.
+    
+    Examples
+    --------
+    >>> train_loader, val_loader, test_loader, classes = load_dataloader(
+    ...     path_data_dir='./data/images',
+    ...     img_w_size=256,
+    ...     img_h_size=256,
+    ...     batch_size=64
+    ... )
+    >>> print(f"Number of classes: {len(classes)}")
+    >>> print(f"Classes: {classes}")
+    
+    Notes
+    -----
+    - Images are automatically shuffled for training set.
+    - The sum of train_ratio and val_ratio must not exceed 1.0.
+    - Class names are determined from subdirectory names.
     """
     logger.info("⚪[load_dataloader_classification] start create dataloaders")
+
+    _validate_dataloader_parameters(
+        path_data_dir=path_data_dir,
+        img_w_size=img_w_size,
+        img_h_size=img_h_size,
+        total_img=total_img,
+        batch_size=batch_size,
+        train_ratio=train_ratio,
+        val_ratio=val_ratio
+    )
 
     base_transform = transforms.Compose([
         transforms.Resize((img_h_size, img_w_size)),
@@ -63,7 +130,10 @@ def load_dataloader(
         transform=base_transform
     )
 
-    classes = list(full_dataset.class_to_idx.keys())
+    classes = _validate_dataset(
+        dataset=full_dataset,
+        path_data_dir=path_data_dir,
+    )
 
     if total_img == 0:
         total_img = len(full_dataset)
@@ -144,14 +214,168 @@ def load_dataloader(
     return train_loader, val_loader, test_loader, classes
 
 
+def _validate_dataloader_parameters(
+    path_data_dir: str,
+    img_w_size: int,
+    img_h_size: int,
+    total_img: int,
+    batch_size: int,
+    train_ratio: float,
+    val_ratio: float,
+    ) -> None:
+    """
+    Validate parameters for dataloader creation.
+    
+    Parameters
+    ----------
+    path_data_dir : str
+        Path to data directory
+    img_w_size : int
+        Image width
+    img_h_size : int
+        Image height
+    total_img : int
+        Total number of images
+    batch_size : int
+        Batch size
+    train_ratio : float
+        Training set ratio
+    val_ratio : float
+        Validation set ratio
+    
+    Raises
+    ------
+    FileNotFoundError
+        If data directory doesn't exist
+    ValueError
+        If any parameter has invalid value
+    """
+    if not os.path.isdir(path_data_dir):
+        raise FileNotFoundError(
+            f"Data directory not found: {path_data_dir}"
+        )
+    
+    if img_w_size <= 0 or img_h_size > 5000:
+        raise ValueError(
+            f"Image width must be between 1 and 5000, got {img_w_size}"
+        )
+    
+    if img_h_size <= 0 or img_h_size > 5000:
+        raise ValueError(
+            f"Image height must be between 1 and 5000, got {img_h_size}"
+        )
+    
+    if total_img < 0:
+        raise ValueError(
+            f"total_img cannot be negative, got {total_img}"
+        )
+    
+    if batch_size <= 0:
+        raise ValueError(
+            f"batch_size must be positive, got {batch_size}"
+        )
+    
+    if not 0 < train_ratio <= 1:
+        raise ValueError(
+            f"train_ratio must be in range (0, 1], got {train_ratio}"
+        )
+    
+    if not 0 <= val_ratio < 1:
+        raise ValueError(
+            f"val_ratio must be in range [0, 1), got {val_ratio}"
+        )
+    
+    if train_ratio + val_ratio > 1.0:
+        raise ValueError(
+            f"Sum of train_ratio ({train_ratio}) and val_ratio ({val_ratio}) "
+            f"must be <= 1.0, got {train_ratio + val_ratio:.2f}"
+        )
+    
+    test_ratio = 1.0 - train_ratio - val_ratio
+    if test_ratio < 0:
+        raise ValueError(
+            f"Resulting test_ratio would be negative: {test_ratio:.2f}. "
+            f"Check train_ratio and val_ratio."
+        )
+
+def _validate_dataset(
+    dataset: datasets.ImageFolder, 
+    path_data_dir: str,
+    min_classes: int = 2,
+) -> List[str]:
+    """
+    Validate ImageFolder dataset structure and content.
+    
+    Performs comprehensive validation of the dataset including:
+    - Existence of classes
+    - Minimum number of images
+    
+    Parameters
+    ----------
+    dataset : datasets.ImageFolder
+        PyTorch ImageFolder dataset to validate
+    path_data_dir : str
+        Path to the data directory (for error messages)
+    min_classes : int, default=2
+        Minimum number of required classes
+    
+    Returns
+    -------
+    List[str]
+        List of validated class names
+    
+    Raises
+    ------
+    ValueError
+        If dataset fails validation checks
+    RuntimeError
+        If dataset structure is invalid
+    
+    Examples
+    --------
+    >>> dataset = datasets.ImageFolder('./data/train')
+    >>> classes = _validate_dataset(dataset, './data/train', min_classes=2)
+    >>> print(f"Validated {len(classes)} classes")
+    """
+    classes = list(dataset.class_to_idx.keys())
+    
+    if len(classes) < min_classes:
+        raise ValueError(
+            f"Insufficient number of classes in {path_data_dir}. "
+            f"Found {len(classes)} classes, expected at least {min_classes}. "
+            f"Check directory structure: {path_data_dir}/class_name/images.jpg"
+        )
+    
+    total_samples = len(dataset)
+    if total_samples == 0:
+        raise ValueError(
+            f"No images found in {path_data_dir}. "
+            f"Directory should contain image files in class subdirectories."
+        )
+
+    if not hasattr(dataset, 'samples') or not dataset.samples:
+        raise RuntimeError(
+            f"Dataset from {path_data_dir} has invalid structure. "
+            f"Missing or empty 'samples' attribute."
+        )
+    
+    return classes
+
 def calculate_normalize_datasets(
         dataloader: DataLoader
     ):
     """
-    Вычисляем значения для нормализации датасета
-
-    Args:
-        dataloader: весь известный нам датасет
+    Compute mean and standard deviation for dataset normalization.
+    
+    Parameters
+    ----------
+    dataloader : DataLoader
+        DataLoader with image batches (images, labels)
+    
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        (mean, std) tensors for each channel
     """
     logger.info("⚪[calculate_normalize_datasets] start")
     channels_sum = torch.zeros(3)
@@ -177,14 +401,21 @@ def denormalize_image(
         std: torch.Tensor,
     ) -> torch.Tensor:
     """
-    Денормализация для отображения
-
-    Args:
-        tensor: изображение в виде тензора
-        mean и std: параметры используемые при нормализации
-
-    Return:
-        изображение в виде тензора
+    Reverse normalization transform for image visualization.
+    
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Normalized image tensor
+    mean : torch.Tensor
+        Mean values used for normalization
+    std : torch.Tensor
+        Standard deviation values used for normalization
+    
+    Returns
+    -------
+    torch.Tensor
+        Denormalized image tensor
     """
     denorm = transforms.Normalize(
         mean=[-m/s for m, s in zip(mean, std)],
