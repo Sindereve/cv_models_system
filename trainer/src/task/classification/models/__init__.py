@@ -19,7 +19,7 @@ def get_model(
     :param args: Positional arguments passed to the model constructor.
     :param kwargs: Keyword arguments passed to the model constructor.
     :return:  Instantiated model object.
-    :rtype: Module
+    :rtype: torch.nn.Module
     """
     logger.info("Start model load")
     if type.lower() not in REGISTRY:
