@@ -2,9 +2,11 @@ import os
 import random
 import numpy as np
 import torch
+from shared.logging import get_logger
 
+logger = get_logger(__name__)
 
-def set_global_seed(seed: int, deterministic: bool = True) -> None:
+def set_seed(seed: int, deterministic: bool = True) -> None:
     """
     Set global random seed for reproducibility.
 
@@ -24,17 +26,7 @@ def set_global_seed(seed: int, deterministic: bool = True) -> None:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         torch.use_deterministic_algorithms(False)
-
     else:
         torch.backends.cudnn.benchmark = True
 
-def seed_worker(worker_id: int):
-    """
-    Seed function for data loader workers.
-    
-    :param worker_id: ID of the worker.
-    :type worker_id: int
-    """
-    worker_seed = torch.initial_seed() % 2**32
-    np.random.seed(worker_seed)
-    random.seed(worker_seed)
+    logger.debug('Seed deterministic function: 42')
