@@ -37,7 +37,7 @@ class Trainer:
             optimizer_config: Dict = None,
             scheduler_config: Dict = None,
             epochs: int = 10,
-            device: Optional[torch.device] = None,
+            device: Optional[str] = 'cpu',
             # mlflow tracking
             log_mlflow: bool = True,
             mlflow_uri: str = 'http://127.0.0.1:5000',
@@ -148,7 +148,7 @@ class Trainer:
         self.logger.info(f" ➖ Validate data sample:{val_size}")
         if self.test_loader is not None:
             test_size = len(self.test_loader.dataset)
-            self.logger.info(f" ➖ Test data sample:   {test_size}")
+            self.logger.info(f" ➖ Test data sample:    {test_size}")
         else:
             test_size = None
             self.logger.info(" ➖ Test data sample:    Not used")
@@ -182,7 +182,7 @@ class Trainer:
 
         check_and_adjust = [
             (self.test_loader, DataLoader, "test_loader", None),
-            (self.device, torch.device, "device", None),
+            (self.device, str, "device", None),
         ]
 
         for obj, type, name, new_val in check_and_adjust :
@@ -320,18 +320,13 @@ class Trainer:
         self.logger.debug(f"|├ Scheduler {scheduler_type} created with params: {scheduler_params}")
         return scheduler
 
-    def _setup_device(self, device: Optional[torch.device] = None):
+    def _setup_device(self, device_str: Optional[str] = None):
         """
         Настройка используемого "аппарата" обучения
         """
         self.logger.debug("├🔘 Start setting device")
 
-        if device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            self.device = device
-        
-        if self.device.type == 'cuda':
+        if device_str == 'cuda':
             if not torch.cuda.is_available():
                 self.logger.warning("🟠 error load 'CUDA'. Using 'CPU'")
                 self.device = torch.device('cpu')
@@ -340,6 +335,9 @@ class Trainer:
                 torch.cuda.empty_cache()
                 gpu_info = torch.cuda.get_device_name(self.device)
                 self.logger.debug(f"||🟡 GPU: {gpu_info}")
+                self.device = torch.device('cuda')
+        else:
+            self.device = torch.device(device_str)
 
         self.logger.info(f"Training on: {self.device}")
         self.logger.debug(f"|└🟢Training on: {self.device}")
