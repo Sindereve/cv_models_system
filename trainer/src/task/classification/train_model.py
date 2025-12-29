@@ -240,7 +240,7 @@ class Trainer:
             raise ValueError(f"Loss function {loss_fn_type} is not found in torch.nn")
         
         if 'params' not in loss_fn_config:
-            raise ValueError("Config must contain 'params' key with optimizer parameters")
+            raise ValueError("Loss function config must contain 'params' key with optimizer parameters")
         
         loss_fn_params = loss_fn_config['params']
         
@@ -271,7 +271,7 @@ class Trainer:
             raise ValueError(f"Optimizer {optimizer_type} is not found in torch.optim")
         
         if 'params' not in optimizer_config:
-            raise ValueError("Config must contain 'params' key with optimizer parameters")
+            raise ValueError("Optimizer config must contain 'params' key with optimizer parameters")
         
         optimizer_params = optimizer_config['params']
         
