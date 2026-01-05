@@ -18,7 +18,7 @@ mlflow.db
 redice_data
 
 # trainer service
-trainer/src/data
+trainer/src/datasets
 trainer/src/shared
 utils_old/
 trainer/src/tester.ipynb
