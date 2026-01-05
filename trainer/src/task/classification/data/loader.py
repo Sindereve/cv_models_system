@@ -33,79 +33,51 @@ def load_dataloader(
         is_calculate_normalize_dataset: bool = False
     ) -> Tuple[DataLoader, DataLoader, DataLoader, List[str]]:
     """
-    Creates train, validation, and test DataLoaders from image directory.
-    
-    The function loads images from a directory structure where each subdirectory
-    represents a class. Images are resized, optionally normalized, and split into
-    train/validation/test sets according to specified ratios.
-    
-    Parameters
-    ----------
-    path_data_dir : str
-        Path to the directory containing image data. Expected structure:
-        path_data_dir/
-            class1/
-                img1.jpg
-                img2.jpg
-            class2/
-                img1.jpg
-                ...
-    
-    img_w_size : int, default=224
-        Target width for image resizing.
-    
-    img_h_size : int, default=224
-        Target height for image resizing.
-    
-    total_img : int, default=0
-        Total number of images to use. If 0, uses all available images.
-    
-    batch_size : int, default=32
-        Batch size for all DataLoaders.
-    
-    train_ratio : float, default=0.75
-        Proportion of data to use for training. Should be between 0 and 1.
-    
-    val_ratio : float, default=0.15
-        Proportion of data to use for validation. Should be between 0 and 1.
-    
-    is_calculate_normalize_dataset : bool, default=False
-        If True, calculates mean and std for dataset normalization.
-        If False, uses default normalization values.
-    
-    Returns
-    -------
-    Tuple[DataLoader, DataLoader, DataLoader, List[str]]
-        Returns a tuple containing:
-        - train_loader : DataLoader for training data
-        - val_loader : DataLoader for validation data  
-        - test_loader : DataLoader for test data
-        - classes : List of class names (alphabetically sorted)
-    
-    Raises
-    ------
-    ValueError
-        If `train_ratio + val_ratio > 1` or if directory doesn't exist.
-    
-    FileNotFoundError
-        If `path_data_dir` doesn't exist or contains no images.
-    
-    Examples
-    --------
-    >>> train_loader, val_loader, test_loader, classes = load_dataloader(
-    ...     path_data_dir='./data/images',
-    ...     img_w_size=256,
-    ...     img_h_size=256,
-    ...     batch_size=64
-    ... )
-    >>> print(f"Number of classes: {len(classes)}")
-    >>> print(f"Classes: {classes}")
-    
-    Notes
-    -----
-    - Images are automatically shuffled for training set.
-    - The sum of train_ratio and val_ratio must not exceed 1.0.
-    - Class names are determined from subdirectory names.
+    Creates train, validation, and test DataLoaders from an image directory.
+
+    The function loads images organized in subdirectories per class, resizes
+    them to the specified dimensions, optionally calculates dataset normalization,
+    and splits them into training, validation, and test sets according to the
+    specified ratios.
+
+    Args:
+        path_data_dir (str):
+            Path to the root directory containing subdirectories of classes.
+        img_w_size (int, optional):
+            Target width for image resizing. Default is 224.
+        img_h_size (int, optional):
+            Target height for image resizing. Default is 224.
+        total_img (int, optional):
+            Total number of images to use. If 0, uses all available images.
+            Default is 0.
+        batch_size (int, optional):
+            Batch size for all DataLoaders. Default is 32.
+        train_ratio (float, optional):
+            Proportion of images for training. Default is 0.75.
+        val_ratio (float, optional):
+            Proportion of images for validation. Default is 0.15.
+        is_calculate_normalize_dataset (bool, optional):
+            If True, calculates mean and std for dataset normalization.
+            If False, uses default normalization values. Default is False.
+
+    Returns:
+        Tuple[DataLoader, DataLoader, DataLoader, List[str]]:
+            A tuple containing:
+            - train_loader: DataLoader for training data
+            - val_loader: DataLoader for validation data
+            - test_loader: DataLoader for test data
+            - classes: List of class names (alphabetically sorted)
+
+    Raises:
+        ValueError:
+            If `train_ratio + val_ratio > 1` or if directory structure is invalid.
+        FileNotFoundError:
+            If `path_data_dir` does not exist or contains no images.
+
+    Behavior / Notes:
+        - Images in the training set are shuffled by default.
+        - Class names are automatically inferred from subdirectory names.
+        - The sum of `train_ratio` and `val_ratio` must not exceed 1.0.
     """
     logger.info("⚪[load_dataloader_classification] start create dataloaders")
 
@@ -224,31 +196,39 @@ def _validate_dataloader_parameters(
     val_ratio: float,
     ) -> None:
     """
-    Validate parameters for dataloader creation.
-    
-    Parameters
-    ----------
-    path_data_dir : str
-        Path to data directory
-    img_w_size : int
-        Image width
-    img_h_size : int
-        Image height
-    total_img : int
-        Total number of images
-    batch_size : int
-        Batch size
-    train_ratio : float
-        Training set ratio
-    val_ratio : float
-        Validation set ratio
-    
-    Raises
-    ------
-    FileNotFoundError
-        If data directory doesn't exist
-    ValueError
-        If any parameter has invalid value
+    Validates input parameters for dataloader creation.
+
+    This function checks the integrity and correctness of all
+    parameters required to create training, validation, and test
+    DataLoaders from an image directory.
+
+    Args:
+        path_data_dir (str):
+            Path to the directory containing image data.
+        img_w_size (int):
+            Target width for image resizing.
+        img_h_size (int):
+            Target height for image resizing.
+        total_img (int):
+            Total number of images to use. Must be non-negative.
+        batch_size (int):
+            Batch size for all DataLoaders. Must be positive.
+        train_ratio (float):
+            Proportion of data for training. Must be between 0 and 1.
+        val_ratio (float):
+            Proportion of data for validation. Must be between 0 and 1.
+            The sum of `train_ratio + val_ratio` must not exceed 1.0.
+
+    Raises:
+        FileNotFoundError:
+            If `path_data_dir` does not exist.
+        ValueError:
+            If any parameter has an invalid value (e.g., negative sizes,
+            invalid ratios, or batch size <= 0).
+
+    Behavior / Notes:
+        - Ensures that dataloader parameters are suitable for dataset splitting.
+        - Intended for internal use before creating DataLoaders.
     """
     if not os.path.isdir(path_data_dir):
         raise FileNotFoundError(
@@ -304,38 +284,35 @@ def _validate_dataset(
     min_classes: int = 2,
 ) -> List[str]:
     """
-    Validate ImageFolder dataset structure and content.
-    
-    Performs comprehensive validation of the dataset including:
-    - Existence of classes
-    - Minimum number of images
-    
-    Parameters
-    ----------
-    dataset : datasets.ImageFolder
-        PyTorch ImageFolder dataset to validate
-    path_data_dir : str
-        Path to the data directory (for error messages)
-    min_classes : int, default=2
-        Minimum number of required classes
-    
-    Returns
-    -------
-    List[str]
-        List of validated class names
-    
-    Raises
-    ------
-    ValueError
-        If dataset fails validation checks
-    RuntimeError
-        If dataset structure is invalid
-    
-    Examples
-    --------
-    >>> dataset = datasets.ImageFolder('./data/train')
-    >>> classes = _validate_dataset(dataset, './data/train', min_classes=2)
-    >>> print(f"Validated {len(classes)} classes")
+    Validates an ImageFolder dataset structure and content.
+
+    Performs a comprehensive validation of the dataset, including:
+    - Existence of classes (subdirectories)
+    - Minimum number of classes
+    - Minimum number of images per class
+
+    Args:
+        dataset (datasets.ImageFolder):
+            PyTorch ImageFolder dataset to validate.
+        path_data_dir (str):
+            Path to the data directory (used for error messages).
+        min_classes (int, optional):
+            Minimum number of required classes. Default is 2.
+
+    Returns:
+        List[str]:
+            Alphabetically sorted list of validated class names.
+
+    Raises:
+        ValueError:
+            If the dataset fails validation checks (e.g., insufficient
+            images or classes).
+        RuntimeError:
+            If the dataset structure is invalid (e.g., missing directories).
+
+    Behavior / Notes:
+        - Ensures that the dataset is ready for DataLoader creation.
+        - Intended for internal use before loading data into training pipeline.
     """
     classes = list(dataset.class_to_idx.keys())
     
@@ -365,17 +342,29 @@ def calculate_normalize_datasets(
         dataloader: DataLoader
     ):
     """
-    Compute mean and standard deviation for dataset normalization.
-    
-    Parameters
-    ----------
-    dataloader : DataLoader
-        DataLoader with image batches (images, labels)
-    
-    Returns
-    -------
-    Tuple[torch.Tensor, torch.Tensor]
-        (mean, std) tensors for each channel
+    Computes mean and standard deviation for dataset normalization.
+
+    This function iterates over all batches in the dataloader and computes
+    the channel-wise mean and standard deviation, which can be used to
+    normalize the dataset for training.
+
+    Args:
+        dataloader (DataLoader):
+            DataLoader providing image batches in the form (images, labels).
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]:
+            - mean: Tensor of shape [C] containing channel-wise mean.
+            - std: Tensor of shape [C] containing channel-wise standard deviation.
+
+    Raises:
+        ValueError:
+            If the dataloader contains no batches (empty dataset).
+
+    Behavior / Notes:
+        - Logs the start and end of computation using `logger`.
+        - Intended for internal use when preparing datasets for training.
+        - Assumes images are in the format (batch, channels, height, width).
     """
     logger.info("⚪[calculate_normalize_datasets] start")
     channels_sum = torch.zeros(3)
@@ -401,21 +390,28 @@ def denormalize_image(
         std: torch.Tensor,
     ) -> torch.Tensor:
     """
-    Reverse normalization transform for image visualization.
-    
-    Parameters
-    ----------
-    tensor : torch.Tensor
-        Normalized image tensor
-    mean : torch.Tensor
-        Mean values used for normalization
-    std : torch.Tensor
-        Standard deviation values used for normalization
-    
-    Returns
-    -------
-    torch.Tensor
-        Denormalized image tensor
+    Reverses normalization for an image tensor for visualization.
+
+    This function applies the inverse of the normalization transform
+    (using the provided mean and standard deviation) to convert a
+    normalized image tensor back to its original range.
+
+    Args:
+        tensor (torch.Tensor):
+            Normalized image tensor of shape (C, H, W) or (B, C, H, W).
+        mean (torch.Tensor):
+            Mean values used during normalization (channel-wise).
+        std (torch.Tensor):
+            Standard deviation values used during normalization (channel-wise).
+
+    Returns:
+        torch.Tensor:
+            Denormalized image tensor, same shape as input.
+
+    Behavior / Notes:
+        - Useful for visualizing images after normalization.
+        - Works for both single images and batches.
+        - The operation does not modify the input tensor in place.
     """
     denorm = transforms.Normalize(
         mean=[-m/s for m, s in zip(mean, std)],

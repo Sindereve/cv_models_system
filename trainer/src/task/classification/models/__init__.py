@@ -12,14 +12,34 @@ def get_model(
         **kwargs
     ) -> nn.Module:
     """
-    Create a model instance from the registry.
-    
-    :param type: Model architecture name registered in REGISTRY.
-    :type type: str
-    :param args: Positional arguments passed to the model constructor.
-    :param kwargs: Keyword arguments passed to the model constructor.
-    :return:  Instantiated model object.
-    :rtype: torch.nn.Module
+    Creates a model instance from the model registry.
+
+    This function retrieves a model class from the `REGISTRY` by its
+    name and instantiates it with the provided arguments. It supports
+    all models registered via the `@register` decorator.
+
+    Args:
+        type (str, optional):
+            Name of the model architecture to load. Must be registered
+            in `REGISTRY`. Default is 'Resnet'.
+        *args:
+            Positional arguments passed to the model constructor.
+        **kwargs:
+            Keyword arguments passed to the model constructor.
+
+    Returns:
+        torch.nn.Module:
+            Instantiated model object.
+
+    Raises:
+        ValueError:
+            If the specified model `type` is not found in `REGISTRY`.
+
+    Behavior / Notes:
+        - Logs the start and completion of model loading using `logger`.
+        - Model classes should be registered in `REGISTRY` using the
+          `@register(name)` decorator.
+        - Supports any model that inherits from `torch.nn.Module`.
     """
     logger.info("Start model load")
     if type.lower() not in REGISTRY:
